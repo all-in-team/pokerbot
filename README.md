@@ -16,9 +16,18 @@ This repo is built incrementally; each phase is runnable on its own.
 | 6a | The viewer — table, animations, reasoning, equity bar, HUD, action log, controls | ✅ done |
 | 4 | Reasoning-agent bots (per-decision JSON, playbook + opponent HUD context) | ✅ done (live + offline mock) |
 | 5 | Post-session coach reflection → versioned playbooks | ✅ done |
-| 6b | Learning-timeline view + playbook diffs in the UI | ⬜ next |
-| 4b | Wire reasoning agents into the live viewer (decision API route + mode toggle) | ⬜ |
+| 6b | Learning-timeline view (win-rate charts + playbook version diffs) | ✅ done |
+| 4b | Wire reasoning agents into the live viewer (decision API route + mode toggle) | ⬜ next |
 | 7 | Replay scrubbing + CFR solver mode (stretch) | ⬜ |
+
+## The learning timeline
+
+`npm run dev` → **http://localhost:3000/learning** (or "Learning ↗" from the table).
+Pick a match and watch each bot's win rate (bb/100) and cumulative chips chart
+across sessions, their postflop tendencies shift version to version, and the full
+playbook revision history with the coach's diffs ("villain over-folds → raise
+c-bet 62% → 68%"). Reads straight from SQLite, so any `npm run reason` /
+`npm run sim` match shows up.
 
 ## Reasoning agents + learning loop
 

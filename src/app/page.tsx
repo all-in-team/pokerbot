@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useArena } from "@/lib/client/useArena.js";
 import { DEFAULT_SETUP, type MatchSetup } from "@/lib/client/bots.js";
 import type { PersonalityName } from "@/bots/heuristic.js";
@@ -35,6 +36,13 @@ export default function ArenaPage() {
         <div className="flex items-center gap-5">
           <Scoreboard arena={arena} />
           <Controls arena={arena} />
+          <Link
+            href="/learning"
+            className="rounded-lg px-4 py-2 text-sm transition-all hover:brightness-125"
+            style={{ border: "1px solid var(--color-line)", color: "var(--color-brass-bright)" }}
+          >
+            Learning ↗
+          </Link>
         </div>
       </header>
 

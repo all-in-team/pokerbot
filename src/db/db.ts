@@ -193,6 +193,85 @@ export interface SessionStatsRow {
   stats: unknown;
 }
 
+export interface MatchSummary {
+  id: number;
+  createdAt: string;
+  seed: string;
+  smallBlind: number;
+  bigBlind: number;
+  startingStack: number;
+  bot0Name: string;
+  bot1Name: string;
+  bot0Style: string | null;
+  bot1Style: string | null;
+  mode: string;
+  hands: number;
+  sessions: number;
+}
+
+/** All matches, newest first, with hand/session counts (for the timeline picker). */
+export function getMatches(db: DB): MatchSummary[] {
+  const rows = db
+    .prepare(
+      `SELECT m.*,
+        (SELECT COUNT(*) FROM hands h WHERE h.match_id = m.id) AS hand_count,
+        (SELECT COUNT(DISTINCT s.session_index) FROM session_stats s WHERE s.match_id = m.id) AS session_count
+       FROM matches m ORDER BY m.id DESC`,
+    )
+    .all() as Record<string, unknown>[];
+  return rows.map((r) => ({
+    id: r.id as number,
+    createdAt: r.created_at as string,
+    seed: r.seed as string,
+    smallBlind: r.small_blind as number,
+    bigBlind: r.big_blind as number,
+    startingStack: r.starting_stack as number,
+    bot0Name: r.bot0_name as string,
+    bot1Name: r.bot1_name as string,
+    bot0Style: (r.bot0_style as string) ?? null,
+    bot1Style: (r.bot1_style as string) ?? null,
+    mode: r.mode as string,
+    hands: r.hand_count as number,
+    sessions: r.session_count as number,
+  }));
+}
+
+export interface StoredSessionStats {
+  sessionIndex: number;
+  botSeat: number;
+  botName: string;
+  hands: number;
+  netChips: number;
+  bbPer100: number;
+  stats: unknown;
+}
+
+export function getSessionStats(db: DB, matchId: number): StoredSessionStats[] {
+  const rows = db
+    .prepare(
+      `SELECT session_index, bot_seat, bot_name, hands, net_chips, bb_per_100, stats_json
+       FROM session_stats WHERE match_id = ? ORDER BY session_index ASC, bot_seat ASC`,
+    )
+    .all(matchId) as {
+    session_index: number;
+    bot_seat: number;
+    bot_name: string;
+    hands: number;
+    net_chips: number;
+    bb_per_100: number;
+    stats_json: string;
+  }[];
+  return rows.map((r) => ({
+    sessionIndex: r.session_index,
+    botSeat: r.bot_seat,
+    botName: r.bot_name,
+    hands: r.hands,
+    netChips: r.net_chips,
+    bbPer100: r.bb_per_100,
+    stats: r.stats_json ? JSON.parse(r.stats_json) : null,
+  }));
+}
+
 export function insertSessionStats(db: DB, row: SessionStatsRow): number {
   const stmt = db.prepare(`
     INSERT INTO session_stats
