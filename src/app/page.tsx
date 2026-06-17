@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useArena } from "@/lib/client/useArena.js";
+import { useArena, type ArenaMode } from "@/lib/client/useArena.js";
 import { DEFAULT_SETUP, type MatchSetup } from "@/lib/client/bots.js";
 import type { PersonalityName } from "@/bots/heuristic.js";
 import { PokerTable } from "@/components/PokerTable.js";
@@ -17,10 +17,19 @@ export default function ArenaPage() {
   const arena = useArena(DEFAULT_SETUP);
   const { view, meta } = arena;
   const [draft, setDraft] = useState<MatchSetup>(DEFAULT_SETUP);
+  const [draftMode, setDraftMode] = useState<ArenaMode>("heuristic");
+  const [llmLive, setLlmLive] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch("/api/llm-status")
+      .then((r) => r.json())
+      .then((d) => setLlmLive(Boolean(d.live)))
+      .catch(() => setLlmLive(false));
+  }, []);
 
   const startNew = () => {
     const next = { ...draft, seed: `${draft.seed}-${Math.floor(performance.now())}` };
-    arena.newMatch(next);
+    arena.newMatch(next, draftMode);
   };
 
   return (
@@ -47,7 +56,14 @@ export default function ArenaPage() {
       </header>
 
       {/* Setup bar */}
-      <SetupBar draft={draft} setDraft={setDraft} onStart={startNew} />
+      <SetupBar
+        draft={draft}
+        setDraft={setDraft}
+        onStart={startNew}
+        mode={draftMode}
+        setMode={setDraftMode}
+        llmLive={llmLive}
+      />
 
       {/* Main grid */}
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_minmax(540px,1.4fr)_1fr]">
@@ -78,7 +94,11 @@ export default function ArenaPage() {
 
       <footer className="mt-8 text-center">
         <span className="eyebrow" style={{ opacity: 0.5 }}>
-          heuristic agents · reasoning agents drop in once an API key is set
+          {arena.mode === "reasoning"
+            ? llmLive
+              ? "reasoning agents · live Anthropic API"
+              : "reasoning agents · offline mock (set ANTHROPIC_API_KEY for live)"
+            : "heuristic agents · switch to Reasoning above to watch the LLM think"}
         </span>
       </footer>
     </main>
@@ -113,14 +133,60 @@ function Divider() {
   return <div className="h-7 w-px" style={{ background: "var(--color-line)" }} />;
 }
 
+function ModeToggle({
+  mode,
+  setMode,
+  llmLive,
+}: {
+  mode: ArenaMode;
+  setMode: (m: ArenaMode) => void;
+  llmLive: boolean | null;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex overflow-hidden rounded-lg" style={{ border: "1px solid var(--color-line)" }}>
+        {(["heuristic", "reasoning"] as ArenaMode[]).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className="px-3 py-1.5 text-xs capitalize transition-all"
+            style={{
+              background: mode === m ? "var(--color-brass-bright)" : "transparent",
+              color: mode === m ? "#1a130a" : "var(--color-muted)",
+              fontWeight: mode === m ? 700 : 500,
+            }}
+          >
+            {m}
+          </button>
+        ))}
+      </div>
+      {mode === "reasoning" && (
+        <span
+          className="data text-[0.6rem] uppercase"
+          style={{ color: llmLive ? "var(--color-jade)" : "var(--color-amber)" }}
+          title={llmLive ? "Using the live Anthropic API" : "Using the offline mock client"}
+        >
+          {llmLive === null ? "…" : llmLive ? "● live API" : "● mock"}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SetupBar({
   draft,
   setDraft,
   onStart,
+  mode,
+  setMode,
+  llmLive,
 }: {
   draft: MatchSetup;
   setDraft: (s: MatchSetup) => void;
   onStart: () => void;
+  mode: ArenaMode;
+  setMode: (m: ArenaMode) => void;
+  llmLive: boolean | null;
 }) {
   const setSeat = (i: 0 | 1, patch: Partial<MatchSetup["seats"][0]>) => {
     const seats = [...draft.seats] as MatchSetup["seats"];
@@ -130,6 +196,8 @@ function SetupBar({
 
   return (
     <div className="panel flex flex-wrap items-center gap-4 rounded-xl px-4 py-3">
+      <ModeToggle mode={mode} setMode={setMode} llmLive={llmLive} />
+      <div className="h-7 w-px" style={{ background: "var(--color-line)" }} />
       <span className="eyebrow">new match</span>
       {[0, 1].map((i) => (
         <div key={i} className="flex items-center gap-2">

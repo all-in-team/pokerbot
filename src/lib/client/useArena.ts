@@ -3,10 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArenaDirector, type ArenaView } from "./director.js";
 import { buildBots, botMeta, type BotMeta, type MatchSetup } from "./bots.js";
+import { buildReasoningBots, type DirectorCtx } from "./reasoningBots.js";
+
+export type ArenaMode = "heuristic" | "reasoning";
 
 export interface ArenaControls {
   view: ArenaView;
   meta: [BotMeta, BotMeta];
+  mode: ArenaMode;
   playing: boolean;
   /** 0..100 slider value (higher = faster). */
   speed: number;
@@ -15,10 +19,21 @@ export interface ArenaControls {
   toggle: () => void;
   stepOnce: () => void;
   setSpeed: (v: number) => void;
-  newMatch: (setup: MatchSetup) => void;
+  newMatch: (setup: MatchSetup, mode?: ArenaMode) => void;
 }
 
 const STACK = 200;
+
+function createDirector(setup: MatchSetup, mode: ArenaMode): ArenaDirector {
+  const ctx: DirectorCtx = { director: null };
+  const bots = mode === "reasoning" ? buildReasoningBots(setup, ctx) : buildBots(setup);
+  const director = new ArenaDirector(
+    { seed: setup.seed, smallBlind: 1, bigBlind: 2, startingStack: STACK },
+    bots,
+  );
+  ctx.director = director;
+  return director;
+}
 
 /** Map the 0..100 speed slider to a per-step delay in ms (higher = faster). */
 function delayForSpeed(speed: number): number {
@@ -26,16 +41,14 @@ function delayForSpeed(speed: number): number {
   return Math.round(1500 - t * 1380); // 1500ms (slow) … 120ms (fast)
 }
 
-export function useArena(initial: MatchSetup): ArenaControls {
+export function useArena(initial: MatchSetup, initialMode: ArenaMode = "heuristic"): ArenaControls {
   const [setup, setSetup] = useState<MatchSetup>(initial);
+  const [mode, setMode] = useState<ArenaMode>(initialMode);
   const directorRef = useRef<ArenaDirector | null>(null);
   const meta = useMemo(() => botMeta(setup), [setup]);
 
   if (directorRef.current === null) {
-    directorRef.current = new ArenaDirector(
-      { seed: setup.seed, smallBlind: 1, bigBlind: 2, startingStack: STACK },
-      buildBots(setup),
-    );
+    directorRef.current = createDirector(setup, initialMode);
   }
 
   const [view, setView] = useState<ArenaView>(() => directorRef.current!.getView());
@@ -86,15 +99,17 @@ export function useArena(initial: MatchSetup): ArenaControls {
     void doStep();
   }, [doStep]);
 
-  const newMatch = useCallback((next: MatchSetup) => {
-    setPlaying(false);
-    directorRef.current = new ArenaDirector(
-      { seed: next.seed, smallBlind: 1, bigBlind: 2, startingStack: STACK },
-      buildBots(next),
-    );
-    setSetup(next);
-    setView(directorRef.current.getView());
-  }, []);
+  const newMatch = useCallback(
+    (next: MatchSetup, nextMode?: ArenaMode) => {
+      setPlaying(false);
+      const m = nextMode ?? mode;
+      directorRef.current = createDirector(next, m);
+      setSetup(next);
+      setMode(m);
+      setView(directorRef.current.getView());
+    },
+    [mode],
+  );
 
-  return { view, meta, playing, speed, play, pause, toggle, stepOnce, setSpeed, newMatch };
+  return { view, meta, mode, playing, speed, play, pause, toggle, stepOnce, setSpeed, newMatch };
 }

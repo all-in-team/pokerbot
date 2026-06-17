@@ -346,4 +346,9 @@ export class ArenaDirector {
   getCompletedCount(): number {
     return this.completed.length;
   }
+
+  /** Live HUD of the given seat across completed hands this session. */
+  opponentHudOf(seat: Seat): HudStats {
+    return computeHudStats(this.completed, seat);
+  }
 }

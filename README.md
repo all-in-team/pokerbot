@@ -17,7 +17,7 @@ This repo is built incrementally; each phase is runnable on its own.
 | 4 | Reasoning-agent bots (per-decision JSON, playbook + opponent HUD context) | ✅ done (live + offline mock) |
 | 5 | Post-session coach reflection → versioned playbooks | ✅ done |
 | 6b | Learning-timeline view (win-rate charts + playbook version diffs) | ✅ done |
-| 4b | Wire reasoning agents into the live viewer (decision API route + mode toggle) | ⬜ next |
+| 4b | Reasoning agents live at the table (decision API route + Heuristic/Reasoning toggle) | ✅ done |
 | 7 | Replay scrubbing + CFR solver mode (stretch) | ⬜ |
 
 ## The learning timeline
@@ -57,9 +57,12 @@ npm run dev        # http://localhost:3000
 Press **Play** and watch two bots play live: animated deals, chips to the pot,
 each bot's inner-monologue reasoning + confidence, a perceived-vs-true equity
 bar (the truth layer), live HUD stats, and an action log. Controls: play / pause
-/ step / speed, plus a New Match bar to pick names and personalities. The whole
-game loop runs client-side (heuristic bots are instant); the `Bot` interface is
-async, so reasoning agents become a server round-trip with no refactor.
+/ step / speed, plus a New Match bar to pick names and personalities.
+
+Toggle **Heuristic ⇄ Reasoning** in the setup bar: Heuristic bots decide
+instantly client-side; Reasoning bots think via `/api/decide` (the offline mock
+with no key, the live Anthropic API with `ANTHROPIC_API_KEY` set) — you watch
+the LLM's reasoning land in the thought panels at the table.
 
 ## Quick start
 
