@@ -14,10 +14,30 @@ This repo is built incrementally; each phase is runnable on its own.
 | 2 | Headless self-play, two heuristic bots, SQLite hand histories | ✅ done |
 | 3 | Monte Carlo equity (truth layer) + live HUD stats | ✅ done |
 | 6a | The viewer — table, animations, reasoning, equity bar, HUD, action log, controls | ✅ done |
-| 4 | Reasoning-agent bots via the Anthropic API (per-decision JSON) | ⬜ needs API key |
-| 5 | Post-session coach reflection → versioned playbooks | ⬜ |
-| 6b | Learning-timeline view + playbook diffs (needs phases 4–5 data) | ⬜ |
+| 4 | Reasoning-agent bots (per-decision JSON, playbook + opponent HUD context) | ✅ done (live + offline mock) |
+| 5 | Post-session coach reflection → versioned playbooks | ✅ done |
+| 6b | Learning-timeline view + playbook diffs in the UI | ⬜ next |
+| 4b | Wire reasoning agents into the live viewer (decision API route + mode toggle) | ⬜ |
 | 7 | Replay scrubbing + CFR solver mode (stretch) | ⬜ |
+
+## Reasoning agents + learning loop
+
+```bash
+# Offline (deterministic mock — no API key, used by tests):
+npm run reason -- --sessions 4 --hands 60 --p0 TAG --p1 maniac --mock
+# Live (set ANTHROPIC_API_KEY in .env first):
+npm run reason -- --sessions 4 --hands 60 --p0 TAG --p1 LAG
+```
+
+Each bot carries a versioned **playbook** (preflop/postflop frequencies + a
+free-text notes section). On every decision it gets its cards, the board, stacks,
+position, the hand's action history, its playbook, and a HUD of the opponent's
+tendencies, and returns `{ action, sizing, confidence, reasoning, perceivedEquity }`
+via `claude-sonnet-4-6`. After each session the **coach** (`claude-opus-4-8`)
+reviews the hands and emits a diff to the playbook ("villain over-folds to turn
+barrels → raise double-barrel frequency"); versions are stored so the learning
+timeline can chart strategy evolution. A deterministic mock client implements the
+same contract so the whole loop runs and tests offline.
 
 ## The viewer
 

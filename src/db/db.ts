@@ -118,3 +118,97 @@ export function countHands(db: DB, matchId: number): number {
   const row = db.prepare("SELECT COUNT(*) AS n FROM hands WHERE match_id = ?").get(matchId) as { n: number };
   return row.n;
 }
+
+// --- Playbook versions (the learning timeline) ---
+
+export interface PlaybookVersionRow {
+  matchId: number;
+  botSeat: number;
+  botName: string;
+  version: number;
+  sessionIndex: number | null;
+  playbook: unknown;
+  diffText?: string | null;
+}
+
+export function insertPlaybookVersion(db: DB, row: PlaybookVersionRow): number {
+  const stmt = db.prepare(`
+    INSERT INTO playbook_versions
+      (match_id, bot_seat, bot_name, version, session_index, playbook_json, diff_text, created_at)
+    VALUES (@match_id, @bot_seat, @bot_name, @version, @session_index, @playbook_json, @diff_text, @created_at)
+  `);
+  const info = stmt.run({
+    match_id: row.matchId,
+    bot_seat: row.botSeat,
+    bot_name: row.botName,
+    version: row.version,
+    session_index: row.sessionIndex,
+    playbook_json: JSON.stringify(row.playbook),
+    diff_text: row.diffText ?? null,
+    created_at: now(),
+  });
+  return Number(info.lastInsertRowid);
+}
+
+export interface StoredPlaybookVersion {
+  version: number;
+  sessionIndex: number | null;
+  playbook: unknown;
+  diffText: string | null;
+  createdAt: string;
+}
+
+export function getPlaybookVersions(db: DB, matchId: number, botSeat: number): StoredPlaybookVersion[] {
+  const rows = db
+    .prepare(
+      `SELECT version, session_index, playbook_json, diff_text, created_at
+       FROM playbook_versions WHERE match_id = ? AND bot_seat = ? ORDER BY version ASC`,
+    )
+    .all(matchId, botSeat) as {
+    version: number;
+    session_index: number | null;
+    playbook_json: string;
+    diff_text: string | null;
+    created_at: string;
+  }[];
+  return rows.map((r) => ({
+    version: r.version,
+    sessionIndex: r.session_index,
+    playbook: JSON.parse(r.playbook_json),
+    diffText: r.diff_text,
+    createdAt: r.created_at,
+  }));
+}
+
+// --- Per-session stats (learning timeline win-rate chart) ---
+
+export interface SessionStatsRow {
+  matchId: number;
+  sessionIndex: number;
+  botSeat: number;
+  botName: string;
+  hands: number;
+  netChips: number;
+  bbPer100: number;
+  stats: unknown;
+}
+
+export function insertSessionStats(db: DB, row: SessionStatsRow): number {
+  const stmt = db.prepare(`
+    INSERT INTO session_stats
+      (match_id, session_index, bot_seat, bot_name, hands, net_chips, bb_per_100, stats_json, created_at)
+    VALUES (@match_id, @session_index, @bot_seat, @bot_name, @hands, @net_chips, @bb_per_100, @stats_json, @created_at)
+  `);
+  const info = stmt.run({
+    match_id: row.matchId,
+    session_index: row.sessionIndex,
+    bot_seat: row.botSeat,
+    bot_name: row.botName,
+    hands: row.hands,
+    net_chips: row.netChips,
+    bb_per_100: row.bbPer100,
+    stats_json: JSON.stringify(row.stats),
+    created_at: now(),
+  });
+  return Number(info.lastInsertRowid);
+}
