@@ -18,7 +18,16 @@ This repo is built incrementally; each phase is runnable on its own.
 | 5 | Post-session coach reflection → versioned playbooks | ✅ done |
 | 6b | Learning-timeline view (win-rate charts + playbook version diffs) | ✅ done |
 | 4b | Reasoning agents live at the table (decision API route + Heuristic/Reasoning toggle) | ✅ done |
-| 7 | Replay scrubbing + CFR solver mode (stretch) | ⬜ |
+| 7a | Replay scrubbing — reconstruct + scrub any past hand of the session | ✅ done |
+| 7b | CFR solver mode (stretch) | ⬜ |
+
+## Replay scrubbing
+
+Play some hands, then hit **Replay ⏮** in the header. The viewer reconstructs any
+past hand of the session deterministically from its log — scrub the slider or
+step action-by-action, jump between hands, and watch the table, reasoning, and
+the true-equity bar at every point. Engine determinism makes every frame exact
+(verified by tests).
 
 ## The learning timeline
 

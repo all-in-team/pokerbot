@@ -10,6 +10,8 @@ import { ThoughtPanel } from "@/components/ThoughtPanel.js";
 import { HudPanel } from "@/components/HudPanel.js";
 import { ActionLog } from "@/components/ActionLog.js";
 import { Controls } from "@/components/Controls.js";
+import { ReplayBar } from "@/components/ReplayBar.js";
+import { buildHandFrames, type ReplayFrame } from "@/lib/client/replay.js";
 
 const PERSONALITIES: PersonalityName[] = ["TAG", "LAG", "nit", "maniac"];
 
@@ -30,7 +32,36 @@ export default function ArenaPage() {
   const startNew = () => {
     const next = { ...draft, seed: `${draft.seed}-${Math.floor(performance.now())}` };
     arena.newMatch(next, draftMode);
+    setReplay(null);
   };
+
+  // --- Replay scrubbing ---
+  const [replay, setReplay] = useState<{ histIndex: number; frames: ReplayFrame[] } | null>(null);
+  const [frameIdx, setFrameIdx] = useState(0);
+  const [replayPlaying, setReplayPlaying] = useState(false);
+
+  const openReplayAt = (idx: number) => {
+    const hist = arena.getHistory();
+    if (idx < 0 || idx >= hist.length) return;
+    arena.pause();
+    setReplay({ histIndex: idx, frames: buildHandFrames(hist[idx]!, meta) });
+    setFrameIdx(0);
+    setReplayPlaying(false);
+  };
+  const openReplay = () => openReplayAt(arena.getHistory().length - 1);
+
+  useEffect(() => {
+    if (!replay || !replayPlaying) return;
+    const last = replay.frames.length - 1;
+    const t = setInterval(() => setFrameIdx((p) => (p >= last ? p : p + 1)), 750);
+    return () => clearInterval(t);
+  }, [replay, replayPlaying]);
+  useEffect(() => {
+    if (replay && replayPlaying && frameIdx >= replay.frames.length - 1) setReplayPlaying(false);
+  }, [frameIdx, replay, replayPlaying]);
+
+  const displayView = replay ? (replay.frames[frameIdx]?.view ?? view) : view;
+  const historyCount = arena.getHistory().length;
 
   return (
     <main className="mx-auto min-h-screen max-w-[1400px] px-5 py-6">
@@ -45,6 +76,15 @@ export default function ArenaPage() {
         <div className="flex items-center gap-5">
           <Scoreboard arena={arena} />
           <Controls arena={arena} />
+          <button
+            onClick={replay ? () => setReplay(null) : openReplay}
+            disabled={!replay && historyCount === 0}
+            className="rounded-lg px-4 py-2 text-sm transition-all hover:brightness-125 disabled:opacity-40"
+            style={{ border: "1px solid var(--color-line)", color: replay ? "var(--color-rust)" : "var(--color-brass-bright)" }}
+            title={historyCount === 0 ? "Play a hand first" : "Scrub through past hands"}
+          >
+            {replay ? "Exit Replay" : `Replay ⏮ ${historyCount}`}
+          </button>
           <Link
             href="/learning"
             className="rounded-lg px-4 py-2 text-sm transition-all hover:brightness-125"
@@ -69,26 +109,42 @@ export default function ArenaPage() {
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_minmax(540px,1.4fr)_1fr]">
         {/* Left rail — seat 0 */}
         <div className="order-2 flex flex-col gap-4 lg:order-1">
-          <ThoughtPanel thought={view.thoughts[0]} meta={meta[0]} align="left" />
+          <ThoughtPanel thought={displayView.thoughts[0]} meta={meta[0]} align="left" />
           <HudPanel hud={view.hud[0]} meta={meta[0]} net={view.sessionNet[0]} align="left" />
         </div>
 
         {/* Center — the table */}
         <div className="order-1 lg:order-2">
-          <PokerTable view={view} meta={meta} />
+          <PokerTable view={displayView} meta={meta} />
         </div>
 
         {/* Right rail — seat 1 */}
         <div className="order-3 flex flex-col gap-4">
-          <ThoughtPanel thought={view.thoughts[1]} meta={meta[1]} align="right" />
+          <ThoughtPanel thought={displayView.thoughts[1]} meta={meta[1]} align="right" />
           <HudPanel hud={view.hud[1]} meta={meta[1]} net={view.sessionNet[1]} align="right" />
         </div>
       </div>
 
-      {/* Action log */}
+      {/* Replay scrubber + action log */}
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_minmax(540px,1.4fr)_1fr]">
         <div className="hidden lg:block" />
-        <ActionLog view={view} meta={meta} />
+        <div className="flex flex-col gap-4">
+          {replay && (
+            <ReplayBar
+              frames={replay.frames}
+              frameIdx={frameIdx}
+              setFrameIdx={setFrameIdx}
+              playing={replayPlaying}
+              setPlaying={setReplayPlaying}
+              histIndex={replay.histIndex}
+              total={historyCount}
+              onPrevHand={() => openReplayAt(replay.histIndex - 1)}
+              onNextHand={() => openReplayAt(replay.histIndex + 1)}
+              onClose={() => setReplay(null)}
+            />
+          )}
+          <ActionLog view={displayView} meta={meta} />
+        </div>
         <div className="hidden lg:block" />
       </div>
 

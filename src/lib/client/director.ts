@@ -8,12 +8,12 @@
  * that React renders and Framer Motion animates between.
  */
 
-import { applyAction, createHand, getLegalActions } from "@/engine/engine.js";
-import { pot as potOf, opponent, type GameState, type HandResult, type Seat, type Street } from "@/engine/state.js";
+import { applyAction, createHand, getLegalActions, type HandConfig } from "@/engine/engine.js";
+import { pot as potOf, opponent, cloneState, type GameState, type HandResult, type Seat, type Street } from "@/engine/state.js";
 import { computeEquity, type EquityResult } from "@/engine/equity.js";
 import type { Card } from "@/engine/cards.js";
 import type { Bot, DecisionView, Position } from "@/bots/types.js";
-import type { DecisionRecord } from "@/sim/match.js";
+import type { DecisionRecord, HandLog } from "@/sim/match.js";
 import { computeHudStats, type HandForStats, type HudStats } from "@/sim/hud.js";
 
 export interface ArenaConfig {
@@ -94,6 +94,9 @@ export class ArenaDirector {
   private lastEvent: ArenaEvent = "idle";
   private equityCache = new Map<string, EquityResult>();
   private finalizedHandIndex = -1;
+  private currentConfig: HandConfig | null = null;
+  private currentHoleCards: [string[], string[]] | null = null;
+  private completedLogs: HandLog[] = [];
 
   constructor(config: ArenaConfig, bots: [Bot, Bot]) {
     this.config = config;
@@ -116,7 +119,7 @@ export class ArenaDirector {
     this.decisions = [];
     this.thoughts = [null, null];
     this.equityCache.clear();
-    this.state = createHand({
+    this.currentConfig = {
       handId: this.handIndex,
       seed: this.config.seed,
       button: this.button,
@@ -126,7 +129,12 @@ export class ArenaDirector {
         { name: this.bots[0].name, stack: this.stacks[0] },
         { name: this.bots[1].name, stack: this.stacks[1] },
       ],
-    });
+    };
+    this.state = createHand(this.currentConfig);
+    this.currentHoleCards = [
+      [...this.state.players[0].holeCards],
+      [...this.state.players[1].holeCards],
+    ];
     this.lastEvent = "deal";
   }
 
@@ -183,6 +191,16 @@ export class ArenaDirector {
       net: result.net,
     });
     this.sessionNet = [this.sessionNet[0] + result.net[0], this.sessionNet[1] + result.net[1]];
+    // Retain the full hand log so any past hand can be replayed/scrubbed.
+    if (this.currentConfig && this.currentHoleCards) {
+      this.completedLogs.push({
+        config: this.currentConfig,
+        state: cloneState(state),
+        decisions: [...this.decisions],
+        holeCards: this.currentHoleCards,
+      });
+      if (this.completedLogs.length > 300) this.completedLogs.shift();
+    }
     this.finalizedHandIndex = this.handIndex;
     // Set up the next hand.
     this.handIndex += 1;
@@ -350,5 +368,10 @@ export class ArenaDirector {
   /** Live HUD of the given seat across completed hands this session. */
   opponentHudOf(seat: Seat): HudStats {
     return computeHudStats(this.completed, seat);
+  }
+
+  /** Full logs of completed hands, newest last — for replay scrubbing. */
+  getHistory(): HandLog[] {
+    return this.completedLogs;
   }
 }

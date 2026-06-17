@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArenaDirector, type ArenaView } from "./director.js";
 import { buildBots, botMeta, type BotMeta, type MatchSetup } from "./bots.js";
 import { buildReasoningBots, type DirectorCtx } from "./reasoningBots.js";
+import type { HandLog } from "@/sim/match.js";
 
 export type ArenaMode = "heuristic" | "reasoning";
 
@@ -20,6 +21,8 @@ export interface ArenaControls {
   stepOnce: () => void;
   setSpeed: (v: number) => void;
   newMatch: (setup: MatchSetup, mode?: ArenaMode) => void;
+  /** Full logs of completed hands this session (for replay scrubbing). */
+  getHistory: () => HandLog[];
 }
 
 const STACK = 200;
@@ -111,5 +114,7 @@ export function useArena(initial: MatchSetup, initialMode: ArenaMode = "heuristi
     [mode],
   );
 
-  return { view, meta, mode, playing, speed, play, pause, toggle, stepOnce, setSpeed, newMatch };
+  const getHistory = useCallback(() => directorRef.current?.getHistory() ?? [], []);
+
+  return { view, meta, mode, playing, speed, play, pause, toggle, stepOnce, setSpeed, newMatch, getHistory };
 }
