@@ -92,6 +92,13 @@ export default function ArenaPage() {
           >
             Learning ↗
           </Link>
+          <Link
+            href="/solver"
+            className="rounded-lg px-4 py-2 text-sm transition-all hover:brightness-125"
+            style={{ border: "1px solid var(--color-line)", color: "var(--color-brass-bright)" }}
+          >
+            Solver ↗
+          </Link>
         </div>
       </header>
 

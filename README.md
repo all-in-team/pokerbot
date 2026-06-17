@@ -19,7 +19,19 @@ This repo is built incrementally; each phase is runnable on its own.
 | 6b | Learning-timeline view (win-rate charts + playbook version diffs) | ✅ done |
 | 4b | Reasoning agents live at the table (decision API route + Heuristic/Reasoning toggle) | ✅ done |
 | 7a | Replay scrubbing — reconstruct + scrub any past hand of the session | ✅ done |
-| 7b | CFR solver mode (stretch) | ⬜ |
+| 7b | CFR solver mode (stretch) | ✅ done |
+
+**All phases complete.**
+
+## CFR solver
+
+`npm run dev` → **http://localhost:3000/solver** (or "Solver ↗" from the table).
+A self-play CFR engine on Kuhn Poker (a 3-card abstraction of NLHE) that
+genuinely converges to a Nash equilibrium: watch **exploitability** (how much a
+best-responding opponent could win) fall toward zero and **strategy entropy**
+settle across iterations, with the converged strategy table showing the textbook
+result — the King opens at ≈ 3× the Jack-bluff rate. Exact exploitability via
+brute-force best response; convergence verified by tests.
 
 ## Replay scrubbing
 
