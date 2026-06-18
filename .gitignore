@@ -11,12 +11,17 @@ npm-debug.log*
 .env.local
 .env*.local
 
-# SQLite databases
+# SQLite databases (db live + sidecars WAL/SHM)
 *.db
+*.db-shm
+*.db-wal
 *.db-journal
 *.sqlite
 *.sqlite3
 data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.db-journal
 
 # OS / editor
 .DS_Store
