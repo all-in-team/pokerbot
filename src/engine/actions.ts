@@ -42,7 +42,7 @@ export function getLegalActions(state: GameState): LegalActions {
     throw new Error("getLegalActions: no player is to act");
   }
   const seat = state.toAct;
-  const p = state.players[seat];
+  const p = state.players[seat]!; // toAct is always a valid seat index
   const cb = state.currentBet;
   const c = p.committedThisStreet;
   const s = p.stack;

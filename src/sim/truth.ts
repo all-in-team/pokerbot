@@ -41,8 +41,8 @@ export function annotateHandTruth(log: HandLog, options: EquityOptions = {}): Tr
 
   for (const d of log.decisions) {
     const board = boardAtStreet(log.state.board, d.street);
-    const me = holes[d.seat];
-    const opp = holes[d.seat === 0 ? 1 : 0];
+    const me = holes[d.seat]!;
+    const opp = holes[d.seat === 0 ? 1 : 0]!;
     const eq = computeEquity(me, opp, board, options);
     const trueEquity = eq.equity[0];
     const perceived = d.perceivedEquity;

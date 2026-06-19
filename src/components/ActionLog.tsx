@@ -32,7 +32,7 @@ export function ActionLog({ view, meta }: { view: ArenaView; meta: [BotMeta, Bot
           </p>
         )}
         {view.decisions.map((d, i) => {
-          const m = meta[d.seat];
+          const m = meta[d.seat]!;
           const amount = "to" in d.action ? d.action.to : 0;
           const isNewStreet = i === 0 || view.decisions[i - 1]!.street !== d.street;
           return (
@@ -66,7 +66,7 @@ export function ActionLog({ view, meta }: { view: ArenaView; meta: [BotMeta, Bot
             ▸ {view.result.showdown ? "showdown" : "won uncontested"} ·{" "}
             {view.result.winners.length === 2
               ? "split pot"
-              : `${meta[view.result.winners[0]!].name} wins ${Math.max(view.result.net[0], view.result.net[1])}`}
+              : `${meta[view.result.winners[0]!]!.name} wins ${Math.max(view.result.net[0], view.result.net[1])}`}
             {view.result.handDescr && view.result.showdown && (
               <span style={{ color: "var(--color-muted)" }}>
                 {" "}

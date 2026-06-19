@@ -26,7 +26,7 @@ const EMPTY_HUD = [computeHudStats([], 0), computeHudStats([], 1)] as [
 ];
 
 function playerView(state: GameState, seat: Seat, meta: BotMeta): PlayerView {
-  const p = state.players[seat];
+  const p = state.players[seat]!;
   return {
     seat,
     name: p.name,
@@ -113,7 +113,7 @@ export function buildHandFrames(log: HandLog, meta: [BotMeta, BotMeta]): ReplayF
     };
     state = applyAction(state, d.action);
     const verb = d.action.type + (amount ? ` to ${amount}` : "");
-    frames.push(frame(state, i + 1, `${meta[seat].name} ${verb}`));
+    frames.push(frame(state, i + 1, `${meta[seat]!.name} ${verb}`));
   });
 
   return frames;

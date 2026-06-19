@@ -60,8 +60,8 @@ async function main() {
       name: names[seat]!,
       style: seat === 0 ? PERSONALITIES[p0].style : PERSONALITIES[p1].style,
       client,
-      getPlaybook: () => playbooks[seat as Seat],
-      getOpponentHud: () => hudRef[(seat === 0 ? 1 : 0) as Seat],
+      getPlaybook: () => playbooks[seat as Seat]!,
+      getOpponentHud: () => hudRef[(seat === 0 ? 1 : 0) as Seat]!,
     }),
   ) as [ReturnType<typeof createReasoningBot>, ReturnType<typeof createReasoningBot>];
 
@@ -87,10 +87,10 @@ async function main() {
       insertPlaybookVersion(db, {
         matchId,
         botSeat: seat,
-        botName: names[seat],
-        version: playbooks[seat].version,
+        botName: names[seat]!,
+        version: playbooks[seat]!.version,
         sessionIndex: -1,
-        playbook: playbooks[seat],
+        playbook: playbooks[seat]!,
         diffText: "initial playbook",
       });
     }
@@ -129,13 +129,13 @@ async function main() {
     // Coach reflection for both bots.
     const summaries: string[] = [];
     for (const seat of [0, 1] as Seat[]) {
-      const res = await reflectOnSession(client, playbooks[seat], seat, logs);
+      const res = await reflectOnSession(client, playbooks[seat]!, seat, logs);
       playbooks[seat] = res.newPlaybook;
       if (db) {
         insertPlaybookVersion(db, {
           matchId,
           botSeat: seat,
-          botName: names[seat],
+          botName: names[seat]!,
           version: res.newPlaybook.version,
           sessionIndex: s,
           playbook: res.newPlaybook,
@@ -145,7 +145,7 @@ async function main() {
           matchId,
           sessionIndex: s,
           botSeat: seat,
-          botName: names[seat],
+          botName: names[seat]!,
           hands: res.selfHud.hands,
           netChips: res.net,
           bbPer100: res.selfHud.winRateBb100,

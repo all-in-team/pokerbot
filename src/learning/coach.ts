@@ -17,7 +17,7 @@ import type { Seat } from "../engine/state.js";
 /** Compact text of the most consequential hands for the reflecting seat. */
 export function summarizeHands(logs: HandLog[], seat: Seat, limit = 8): string {
   const ranked = [...logs]
-    .map((log) => ({ log, swing: Math.abs(log.state.result!.net[seat]) }))
+    .map((log) => ({ log, swing: Math.abs(log.state.result!.net[seat] ?? 0) }))
     .sort((a, b) => b.swing - a.swing)
     .slice(0, limit);
 
@@ -26,8 +26,8 @@ export function summarizeHands(logs: HandLog[], seat: Seat, limit = 8): string {
   return ranked
     .map(({ log }) => {
       const r = log.state.result!;
-      const net = r.net[seat];
-      const hole = log.holeCards[seat].join(" ");
+      const net = r.net[seat] ?? 0;
+      const hole = (log.holeCards[seat] ?? []).join(" ");
       const board = log.state.board.length ? log.state.board.join(" ") : "no flop";
       const acts = log.decisions
         .map((d) => `${d.seat === seat ? "me" : "opp"} ${d.action.type}${"to" in d.action ? ` ${d.action.to}` : ""}`)
@@ -60,7 +60,7 @@ export async function reflectOnSession(
   const stats = logs.map(handLogToStats);
   const selfHud = computeHudStats(stats, seat);
   const opponentHud = computeHudStats(stats, (seat === 0 ? 1 : 0) as Seat);
-  const net = logs.reduce((sum, l) => sum + l.state.result!.net[seat], 0);
+  const net = logs.reduce((sum, l) => sum + (l.state.result!.net[seat] ?? 0), 0);
   const handsSummary = summarizeHands(logs, seat);
 
   const { system, user } = buildReflectionPrompt(playbook, selfHud, opponentHud, net, handsSummary);

@@ -39,8 +39,8 @@ function positionOf(state: GameState, seat: Seat): Position {
 }
 
 function buildView(state: GameState, seat: Seat): DecisionView {
-  const me = state.players[seat];
-  const opp = state.players[seat === 0 ? 1 : 0];
+  const me = state.players[seat]!;
+  const opp = state.players[seat === 0 ? 1 : 0]!;
   const legal = getLegalActions(state);
   return {
     handId: state.handId,
@@ -84,7 +84,7 @@ export async function playHand(
     if (state.toAct === null) throw new Error("match: no actor but hand incomplete");
     const seat = state.toAct;
     const view = buildView(state, seat);
-    const decision = await bots[seat].decide(view);
+    const decision = await bots[seat]!.decide(view);
 
     const record: DecisionRecord = {
       index: decisions.length,

@@ -39,8 +39,8 @@ function toActionInput(d: DecisionJson): ActionInput {
 }
 
 function makeRemoteBot(seat: Seat, setup: MatchSetup, ctx: DirectorCtx): Bot {
-  const playbook = defaultPlaybook(setup.seats[seat].personality);
-  const name = setup.seats[seat].name;
+  const playbook = defaultPlaybook(setup.seats[seat]!.personality);
+  const name = setup.seats[seat]!.name;
   const opp: Seat = (seat === 0 ? 1 : 0) as Seat;
 
   async function decide(view: DecisionView): Promise<Decision> {
@@ -71,7 +71,7 @@ function makeRemoteBot(seat: Seat, setup: MatchSetup, ctx: DirectorCtx): Bot {
     }
   }
 
-  return { name, style: setup.seats[seat].personality, decide };
+  return { name, style: setup.seats[seat]!.personality, decide };
 }
 
 export function buildReasoningBots(setup: MatchSetup, ctx: DirectorCtx): [Bot, Bot] {

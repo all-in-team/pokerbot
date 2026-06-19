@@ -20,7 +20,8 @@ export interface HandForStats {
   actionHistory: Action[];
   showdown: boolean;
   winners: Seat[];
-  net: [number, number];
+  /** Net chips per seat (indexed by seat). Length = player count. */
+  net: number[];
 }
 
 export interface HudStats {
@@ -129,9 +130,10 @@ export function computeHudStats(hands: HandForStats[], seat: Seat): HudStats {
       c.showdowns++;
       if (h.winners.includes(seat)) c.showdownsWon++;
     }
-    netChips += h.net[seat];
-    if (h.net[seat] > 0) handsWon++;
-    totalBb += h.net[seat] / h.bigBlind;
+    const seatNet = h.net[seat] ?? 0;
+    netChips += seatNet;
+    if (seatNet > 0) handsWon++;
+    totalBb += seatNet / h.bigBlind;
   }
 
   const n = hands.length || 1;

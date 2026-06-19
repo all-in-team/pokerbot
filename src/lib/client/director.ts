@@ -143,7 +143,7 @@ export class ArenaDirector {
     const seat = state.toAct!;
     const streetBefore = state.street;
     const view = this.buildDecisionView(state, seat);
-    const decision = await this.bots[seat].decide(view);
+    const decision = await this.bots[seat]!.decide(view);
 
     this.decisions.push({
       index: this.decisions.length,
@@ -208,8 +208,8 @@ export class ArenaDirector {
   }
 
   private buildDecisionView(state: GameState, seat: Seat): DecisionView {
-    const me = state.players[seat];
-    const opp = state.players[opponent(seat)];
+    const me = state.players[seat]!;
+    const opp = state.players[opponent(seat)]!;
     const legal = getLegalActions(state);
     return {
       handId: state.handId,
@@ -260,11 +260,11 @@ export class ArenaDirector {
     ];
 
     const mkPlayer = (seat: Seat): PlayerView => {
-      const p = state.players[seat];
+      const p = state.players[seat]!;
       return {
         seat,
         name: p.name,
-        style: this.bots[seat].style,
+        style: this.bots[seat]!.style,
         stack: p.stack,
         committedThisStreet: p.committedThisStreet,
         committedTotal: p.committedTotal,
@@ -346,8 +346,8 @@ export class ArenaDirector {
   private placeholderPlayer(seat: Seat): PlayerView {
     return {
       seat,
-      name: this.bots[seat].name,
-      style: this.bots[seat].style,
+      name: this.bots[seat]!.name,
+      style: this.bots[seat]!.style,
       stack: this.config.startingStack,
       committedThisStreet: 0,
       committedTotal: 0,
