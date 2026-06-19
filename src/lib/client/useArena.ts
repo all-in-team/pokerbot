@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArenaDirector, type ArenaView } from "./director.js";
 import { buildBots, botMeta, type BotMeta, type MatchSetup } from "./bots.js";
 import { buildReasoningBots, type DirectorCtx } from "./reasoningBots.js";
+import { defaultPlaybook, type Playbook, type PlaybookDiff, type TunablePath } from "@/learning/playbook.js";
+import type { Seat } from "@/engine/state.js";
 import type { HandLog } from "@/sim/match.js";
 
 export type ArenaMode = "heuristic" | "reasoning";
@@ -23,17 +25,28 @@ export interface ArenaControls {
   newMatch: (setup: MatchSetup, mode?: ArenaMode) => void;
   /** Full logs of completed hands this session (for replay scrubbing). */
   getHistory: () => HandLog[];
+
+  // --- Coaching: client-held, session-scoped playbooks (Vercel-stateless) ---
+  /** Current playbook per seat (mirrors what the reasoning bots read live). */
+  playbooks: [Playbook, Playbook];
+  /** Append a coach lesson — takes effect on the bot's NEXT decision. */
+  addNote: (seat: Seat, note: string) => void;
+  /** Tune a numeric playbook field (frequencies clamped to 0..1). */
+  setTunable: (seat: Seat, path: TunablePath, value: number) => void;
+  /** Run the coach over this session's hands; returns the applied diff (or null). */
+  reflect: (seat: Seat) => Promise<PlaybookDiff | null>;
 }
 
 const STACK = 200;
 
-function createDirector(setup: MatchSetup, mode: ArenaMode): ArenaDirector {
+function initPlaybooks(setup: MatchSetup): [Playbook, Playbook] {
+  return [defaultPlaybook(setup.seats[0].personality), defaultPlaybook(setup.seats[1].personality)];
+}
+
+function createDirector(setup: MatchSetup, mode: ArenaMode, getPlaybook: (seat: Seat) => Playbook): ArenaDirector {
   const ctx: DirectorCtx = { director: null };
-  const bots = mode === "reasoning" ? buildReasoningBots(setup, ctx) : buildBots(setup);
-  const director = new ArenaDirector(
-    { seed: setup.seed, smallBlind: 1, bigBlind: 2, startingStack: STACK },
-    bots,
-  );
+  const bots = mode === "reasoning" ? buildReasoningBots(setup, ctx, getPlaybook) : buildBots(setup);
+  const director = new ArenaDirector({ seed: setup.seed, smallBlind: 1, bigBlind: 2, startingStack: STACK }, bots);
   ctx.director = director;
   return director;
 }
@@ -47,11 +60,20 @@ function delayForSpeed(speed: number): number {
 export function useArena(initial: MatchSetup, initialMode: ArenaMode = "heuristic"): ArenaControls {
   const [setup, setSetup] = useState<MatchSetup>(initial);
   const [mode, setMode] = useState<ArenaMode>(initialMode);
-  const directorRef = useRef<ArenaDirector | null>(null);
   const meta = useMemo(() => botMeta(setup), [setup]);
 
+  // Client-held playbooks: a ref the bots read live + a state mirror for the UI.
+  const playbooksRef = useRef<[Playbook, Playbook]>(initPlaybooks(initial));
+  const [playbooks, setPlaybooks] = useState<[Playbook, Playbook]>(playbooksRef.current);
+  const getPlaybook = useCallback((seat: Seat) => playbooksRef.current[seat]!, []);
+  const commitPlaybooks = useCallback((next: [Playbook, Playbook]) => {
+    playbooksRef.current = next;
+    setPlaybooks(next);
+  }, []);
+
+  const directorRef = useRef<ArenaDirector | null>(null);
   if (directorRef.current === null) {
-    directorRef.current = createDirector(setup, initialMode);
+    directorRef.current = createDirector(setup, initialMode, getPlaybook);
   }
 
   const [view, setView] = useState<ArenaView>(() => directorRef.current!.getView());
@@ -106,15 +128,69 @@ export function useArena(initial: MatchSetup, initialMode: ArenaMode = "heuristi
     (next: MatchSetup, nextMode?: ArenaMode) => {
       setPlaying(false);
       const m = nextMode ?? mode;
-      directorRef.current = createDirector(next, m);
+      // Fresh session ⇒ fresh playbooks (session-scoped coaching).
+      const pbs = initPlaybooks(next);
+      playbooksRef.current = pbs;
+      setPlaybooks(pbs);
+      directorRef.current = createDirector(next, m, getPlaybook);
       setSetup(next);
       setMode(m);
       setView(directorRef.current.getView());
     },
-    [mode],
+    [mode, getPlaybook],
   );
 
   const getHistory = useCallback(() => directorRef.current?.getHistory() ?? [], []);
 
-  return { view, meta, mode, playing, speed, play, pause, toggle, stepOnce, setSpeed, newMatch, getHistory };
+  // --- Coaching actions ---
+  const addNote = useCallback(
+    (seat: Seat, note: string) => {
+      const text = note.trim();
+      if (!text) return;
+      const cur = playbooksRef.current;
+      const updated: Playbook = { ...cur[seat]!, notes: [...cur[seat]!.notes, text] };
+      const next: [Playbook, Playbook] = seat === 0 ? [updated, cur[1]!] : [cur[0]!, updated];
+      commitPlaybooks(next);
+    },
+    [commitPlaybooks],
+  );
+
+  const setTunable = useCallback(
+    (seat: Seat, path: TunablePath, value: number) => {
+      const cur = playbooksRef.current;
+      const updated = structuredClone(cur[seat]!);
+      const [group, field] = path.split(".") as [keyof Playbook, string];
+      const isFreq = !path.includes("Size") && !path.includes("X");
+      (updated[group] as Record<string, number>)[field] = isFreq ? Math.max(0, Math.min(1, value)) : Math.max(0.5, value);
+      const next: [Playbook, Playbook] = seat === 0 ? [updated, cur[1]!] : [cur[0]!, updated];
+      commitPlaybooks(next);
+    },
+    [commitPlaybooks],
+  );
+
+  const reflect = useCallback(
+    async (seat: Seat): Promise<PlaybookDiff | null> => {
+      const hands = directorRef.current?.getHistory() ?? [];
+      if (hands.length === 0) return null;
+      const res = await fetch("/api/reflect", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        // Cap payload: the last slice of the session is plenty for reflection.
+        body: JSON.stringify({ playbook: playbooksRef.current[seat]!, seat, hands: hands.slice(-80) }),
+      });
+      const data = (await res.json()) as { playbook?: Playbook; diff?: PlaybookDiff; error?: string };
+      if (!data.playbook || !data.diff) throw new Error(data.error ?? "reflect failed");
+      const cur = playbooksRef.current;
+      const next: [Playbook, Playbook] = seat === 0 ? [data.playbook, cur[1]!] : [cur[0]!, data.playbook];
+      commitPlaybooks(next);
+      return data.diff;
+    },
+    [commitPlaybooks],
+  );
+
+  return {
+    view, meta, mode, playing, speed,
+    play, pause, toggle, stepOnce, setSpeed, newMatch, getHistory,
+    playbooks, addNote, setTunable, reflect,
+  };
 }

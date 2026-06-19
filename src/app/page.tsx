@@ -11,6 +11,7 @@ import { HudPanel } from "@/components/HudPanel.js";
 import { ActionLog } from "@/components/ActionLog.js";
 import { Controls } from "@/components/Controls.js";
 import { ReplayBar } from "@/components/ReplayBar.js";
+import { CoachPanel } from "@/components/CoachPanel.js";
 import { buildHandFrames, type ReplayFrame } from "@/lib/client/replay.js";
 
 const PERSONALITIES: PersonalityName[] = ["TAG", "LAG", "nit", "maniac"];
@@ -132,9 +133,17 @@ export default function ArenaPage() {
         </div>
       </div>
 
-      {/* Replay scrubber + action log */}
+      {/* Coach panel + replay scrubber + action log */}
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_minmax(540px,1.4fr)_1fr]">
-        <div className="hidden lg:block" />
+        <CoachPanel
+          playbooks={arena.playbooks}
+          meta={meta}
+          mode={arena.mode}
+          llmLive={llmLive}
+          onAddNote={arena.addNote}
+          onSetTunable={arena.setTunable}
+          onReflect={arena.reflect}
+        />
         <div className="flex flex-col gap-4">
           {replay && (
             <ReplayBar

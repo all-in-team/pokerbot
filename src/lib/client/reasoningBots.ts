@@ -9,11 +9,11 @@
  */
 
 import { clampToLegal } from "@/bots/util.js";
-import { defaultPlaybook } from "@/learning/playbook.js";
 import { computeHudStats } from "@/sim/hud.js";
 import type { Bot, Decision, DecisionView } from "@/bots/types.js";
 import type { ActionInput } from "@/engine/actions.js";
 import type { DecisionJson } from "@/llm/types.js";
+import type { Playbook } from "@/learning/playbook.js";
 import type { Seat } from "@/engine/state.js";
 import type { ArenaDirector } from "./director.js";
 import type { MatchSetup } from "./bots.js";
@@ -38,12 +38,17 @@ function toActionInput(d: DecisionJson): ActionInput {
   }
 }
 
-function makeRemoteBot(seat: Seat, setup: MatchSetup, ctx: DirectorCtx): Bot {
-  const playbook = defaultPlaybook(setup.seats[seat]!.personality);
+function makeRemoteBot(seat: Seat, setup: MatchSetup, ctx: DirectorCtx, getPlaybook: () => Playbook): Bot {
   const name = setup.seats[seat]!.name;
   const opp: Seat = (seat === 0 ? 1 : 0) as Seat;
 
   async function decide(view: DecisionView): Promise<Decision> {
+    // Read the playbook FRESH each decision so coach edits (new notes / tuned
+    // frequencies) take effect on the very next action.
+    const playbook = getPlaybook();
+    // TODO(truth-anchor): the client director knows both hands, so it could pass
+    // the engine's true all-in equity here (DecideInput.trueEquity hook) to ground
+    // the bot — and feed a misreadDelta summary into /api/reflect. Deferred.
     const opponentHud = ctx.director?.opponentHudOf(opp) ?? computeHudStats([], opp);
     try {
       const res = await fetch("/api/decide", {
@@ -74,8 +79,15 @@ function makeRemoteBot(seat: Seat, setup: MatchSetup, ctx: DirectorCtx): Bot {
   return { name, style: setup.seats[seat]!.personality, decide };
 }
 
-export function buildReasoningBots(setup: MatchSetup, ctx: DirectorCtx): [Bot, Bot] {
-  return [makeRemoteBot(0, setup, ctx), makeRemoteBot(1, setup, ctx)];
+export function buildReasoningBots(
+  setup: MatchSetup,
+  ctx: DirectorCtx,
+  getPlaybook: (seat: Seat) => Playbook,
+): [Bot, Bot] {
+  return [
+    makeRemoteBot(0, setup, ctx, () => getPlaybook(0)),
+    makeRemoteBot(1, setup, ctx, () => getPlaybook(1)),
+  ];
 }
 
 const clampish = (x: number) => (Number.isFinite(x) ? Math.max(0, Math.min(1, x)) : 0);
