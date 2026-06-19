@@ -30,3 +30,8 @@ data/*.db-journal
 *.tsbuildinfo
 coverage/
 .gstack/
+
+# Python (sim/ référence pokerkit)
+.venv/
+.pytest_cache/
+__pycache__/
