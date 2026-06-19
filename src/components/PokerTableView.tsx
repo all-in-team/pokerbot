@@ -139,7 +139,12 @@ function Positioned({ xy, factor, z = 4, children }: { xy: { x: number; y: numbe
 
 function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number; y: number }; ante: number; reveal: boolean }) {
   const { x, y } = xy;
-  const showCards = (seat.revealed || reveal) && !seat.folded && seat.cards.length === 2;
+  const hasCards = seat.cards.length === 2;
+  // Face up when this seat's cards are revealed (showdown) or a full reveal is on
+  // (study mode) — this is what turns FOLDED hands face-up at hand end too.
+  const faceUp = (seat.revealed || reveal) && hasCards;
+  // Render a card block for live seats (backs) and for any seat we're revealing.
+  const showCardBlock = !seat.folded || (reveal && hasCards);
   const ring = seat.isWinner ? C.teal : seat.isActor ? C.teal : null;
   const winnerGlow = seat.isWinner;
 
@@ -154,16 +159,17 @@ function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number;
         flexDirection: "column",
         alignItems: "center",
         gap: 5,
-        opacity: seat.folded ? 0.4 : 1,
-        filter: seat.folded ? "grayscale(1)" : "none",
+        // Folded seats dim; when revealing (study), keep them legible (no grayscale).
+        opacity: seat.folded ? (reveal ? 0.72 : 0.4) : 1,
+        filter: seat.folded && !reveal ? "grayscale(1)" : "none",
         transition: "opacity .2s ease, filter .2s ease",
         zIndex: seat.isActor || seat.isWinner ? 6 : 3,
         width: "max-content",
       }}
     >
-      {!seat.folded && (
+      {showCardBlock && (
         <div style={{ display: "flex", gap: 4 }}>
-          {showCards ? (
+          {faceUp ? (
             <>
               <Card card={parseCard(seat.cards[0]!)} variant="seat" />
               <Card card={parseCard(seat.cards[1]!)} variant="seat" />
