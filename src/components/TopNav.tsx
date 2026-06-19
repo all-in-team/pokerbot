@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 
 const LINKS = [
   { href: "/", label: "Arène" },
+  { href: "/play", label: "Play" },
   { href: "/watch", label: "Watch" },
   { href: "/learning", label: "Learning" },
   { href: "/solver", label: "Solver" },

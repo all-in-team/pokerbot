@@ -26,6 +26,12 @@ const SEAT_XY: Record<Position, { x: number; y: number }> = {
   SB: { x: 91, y: 64 },
 };
 
+// Screen slots clockwise from the BOTTOM — used when a hero seat is pinned at
+// the bottom (e.g. /play). Slot 0 is the bottom (the human).
+const SLOTS: { x: number; y: number }[] = [
+  SEAT_XY.BB, SEAT_XY.UTG, SEAT_XY.HJ, SEAT_XY.CO, SEAT_XY.BTN, SEAT_XY.SB,
+];
+
 const parseCard = (str: string) => ({ r: str.slice(0, -1), s: str.slice(-1) });
 
 const TAB: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
@@ -122,17 +128,16 @@ function BetChip({ amount }: { amount: number }) {
   );
 }
 
-function Positioned({ pos, factor, z = 4, children }: { pos: Position; factor: number; z?: number; children: React.ReactNode }) {
-  const { x, y } = SEAT_XY[pos];
-  const cx = x + (50 - x) * factor;
-  const cy = y + (50 - y) * factor;
+function Positioned({ xy, factor, z = 4, children }: { xy: { x: number; y: number }; factor: number; z?: number; children: React.ReactNode }) {
+  const cx = xy.x + (50 - xy.x) * factor;
+  const cy = xy.y + (50 - xy.y) * factor;
   return (
     <div style={{ position: "absolute", left: `${cx}%`, top: `${cy}%`, transform: "translate(-50%, -50%)", zIndex: z }}>{children}</div>
   );
 }
 
-function SeatPod({ seat, ante, reveal }: { seat: SeatFrame; ante: number; reveal: boolean }) {
-  const { x, y } = SEAT_XY[seat.position];
+function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number; y: number }; ante: number; reveal: boolean }) {
+  const { x, y } = xy;
   const showCards = (seat.revealed || reveal) && !seat.folded && seat.cards.length === 2;
   const ring = seat.isWinner ? C.teal : seat.isActor ? C.teal : null;
   const winnerGlow = seat.isWinner;
@@ -238,10 +243,24 @@ function SeatPod({ seat, ante, reveal }: { seat: SeatFrame; ante: number; reveal
   );
 }
 
-export default function PokerTableView({ state, revealAll = false }: { state: Frame; revealAll?: boolean }) {
+export default function PokerTableView({
+  state,
+  revealAll = false,
+  heroSeat,
+}: {
+  state: Frame;
+  revealAll?: boolean;
+  /** When set, this seat is pinned at the bottom and others fill clockwise. */
+  heroSeat?: number;
+}) {
   const board = state.board.map(parseCard);
   const buttonSeat = state.seats.find((s) => s.isButton);
   const climax = state.kind === "award";
+  const n = state.seats.length;
+  // Screen coords for a seat: pinned-to-hero layout if heroSeat is set, else
+  // the position-label layout used by /watch.
+  const xyOf = (seat: SeatFrame): { x: number; y: number } =>
+    heroSeat != null ? SLOTS[(((seat.seat - heroSeat) % n) + n) % n] ?? SEAT_XY[seat.position] : SEAT_XY[seat.position];
 
   return (
     <div
@@ -297,12 +316,12 @@ export default function PokerTableView({ state, revealAll = false }: { state: Fr
 
         {/* seats */}
         {state.seats.map((s) => (
-          <SeatPod key={s.seat} seat={s} ante={state.ante} reveal={revealAll} />
+          <SeatPod key={s.seat} seat={s} xy={xyOf(s)} ante={state.ante} reveal={revealAll} />
         ))}
 
         {/* dealer button */}
         {buttonSeat && (
-          <Positioned pos={buttonSeat.position} factor={0.2} z={5}>
+          <Positioned xy={xyOf(buttonSeat)} factor={0.2} z={5}>
             <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#F4F1E8", color: "#0E1117", fontWeight: 900, fontSize: 14, display: "grid", placeItems: "center", boxShadow: "0 3px 8px rgba(0,0,0,0.55)" }}>
               D
             </div>
@@ -313,7 +332,7 @@ export default function PokerTableView({ state, revealAll = false }: { state: Fr
         {state.seats
           .filter((s) => s.bet > 0 && !s.folded)
           .map((s) => (
-            <Positioned key={`bet-${s.seat}`} pos={s.position} factor={0.42}>
+            <Positioned key={`bet-${s.seat}`} xy={xyOf(s)} factor={0.42}>
               <BetChip amount={s.bet} />
             </Positioned>
           ))}

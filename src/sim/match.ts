@@ -58,7 +58,7 @@ function opponentsOf(state: GameState, seat: Seat): OpponentView[] {
   return out;
 }
 
-function buildView(state: GameState, seat: Seat): DecisionView {
+export function buildView(state: GameState, seat: Seat): DecisionView {
   const me = state.players[seat]!;
   const opponents = opponentsOf(state, seat);
   const firstOpp = opponents[0]; // heads-up convenience for legacy fields
