@@ -171,12 +171,21 @@ export default function PlayPage() {
   }
 
   const pot = potOf(state);
-  const heroCommitted = state.players[HERO]!.committedThisStreet;
-  const SHORTCUTS = legal
+  // Pot-fraction "raise to", standard convention: the fraction applies to the pot
+  // AFTER calling the bet in front (pot + toCall), added on top of the current bet.
+  // Clamped to the legal min-raise and to the stack (all-in).
+  const presetTo = (frac: number): number => {
+    if (!legal) return 0;
+    const raw = state.currentBet + Math.round(frac * (pot + legal.toCall));
+    return Math.max(legal.minTo, Math.min(legal.maxTo, raw));
+  };
+  const PRESETS = legal
     ? [
-        { label: "½ pot", to: () => sizeToFromPotFraction(0.5, pot, heroCommitted, state.currentBet, legal) },
-        { label: "pot", to: () => sizeToFromPotFraction(1, pot, heroCommitted, state.currentBet, legal) },
-        { label: "all-in", to: () => legal.maxTo },
+        { label: "⅓", value: presetTo(1 / 3) },
+        { label: "⅔", value: presetTo(2 / 3) },
+        { label: "POT", value: presetTo(1) },
+        { label: "2× POT", value: presetTo(2) },
+        { label: "AI", value: legal.maxTo },
       ]
     : [];
 
@@ -230,20 +239,51 @@ export default function PlayPage() {
                   )}
                   {(legal.canBet || legal.canRaise) && (
                     <button style={btn("#E0913B")} onClick={() => void onAct({ type: legal.aggressiveType, to: amount })}>
-                      {legal.aggressiveType === "bet" ? `Bet ${amount}` : `Raise to ${amount}`}
+                      {legal.aggressiveType === "bet" ? `Bet → ${amount}` : `Raise → ${amount}`}
                     </button>
                   )}
                 </div>
                 {(legal.canBet || legal.canRaise) && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <input className="arena-range" type="range" min={legal.minTo} max={legal.maxTo} step={1} value={Math.min(Math.max(amount, legal.minTo), legal.maxTo)} onChange={(e) => setAmount(Number(e.target.value))} style={{ flex: 1 }} />
-                    <span style={{ width: 56, textAlign: "right", fontVariantNumeric: "tabular-nums", color: C.text }}>{amount}</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {/* Quick-size presets — pot-fraction (after calling), clamped to min-raise & stack. */}
                     <div style={{ display: "flex", gap: 6 }}>
-                      {SHORTCUTS.map((sc) => (
-                        <button key={sc.label} onClick={() => setAmount(sc.to())} style={{ appearance: "none", border: `1px solid ${C.border}`, borderRadius: 8, background: "transparent", color: C.text2, fontSize: 12, padding: "6px 8px", cursor: "pointer" }}>
-                          {sc.label}
-                        </button>
-                      ))}
+                      {PRESETS.map((p) => {
+                        // Grey a preset that collapses onto a neighbour it can't beat
+                        // (e.g. its size is below the legal min-raise → no distinct spot).
+                        const redundant = p.label !== "AI" && p.value <= legal.minTo && legal.minTo < legal.maxTo && presetTo(1 / 3) >= p.value && p.value !== presetTo(1 / 3);
+                        const active = amount === p.value;
+                        const accent = C.action.bet;
+                        return (
+                          <button
+                            key={p.label}
+                            disabled={redundant}
+                            onClick={() => setAmount(p.value)}
+                            style={{
+                              flex: 1,
+                              appearance: "none",
+                              border: `1px solid ${active ? accent : C.border}`,
+                              borderRadius: 10,
+                              background: active ? "rgba(224,145,59,0.16)" : "transparent",
+                              color: redundant ? C.text3 : active ? accent : C.text,
+                              fontSize: 13,
+                              fontWeight: 600,
+                              minHeight: 44,
+                              padding: "8px 4px",
+                              cursor: redundant ? "not-allowed" : "pointer",
+                              opacity: redundant ? 0.4 : 1,
+                              fontVariantNumeric: "tabular-nums",
+                            }}
+                          >
+                            <div>{p.label}</div>
+                            <div style={{ fontSize: 11, fontWeight: 500, color: redundant ? C.text3 : C.text2 }}>{p.value}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* Custom amount — slider + live value. */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input className="arena-range" type="range" min={legal.minTo} max={legal.maxTo} step={1} value={Math.min(Math.max(amount, legal.minTo), legal.maxTo)} onChange={(e) => setAmount(Number(e.target.value))} style={{ flex: 1 }} />
+                      <span style={{ width: 56, textAlign: "right", fontVariantNumeric: "tabular-nums", color: C.text }}>{amount}</span>
                     </div>
                   </div>
                 )}
