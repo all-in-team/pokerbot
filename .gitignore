@@ -6,10 +6,10 @@ build/
 *.log
 npm-debug.log*
 
-# Env
+# Env — never commit secrets. Only .env.example is tracked.
 .env
-.env.local
-.env*.local
+.env.*
+!.env.example
 
 # SQLite databases (db live + sidecars WAL/SHM)
 *.db
