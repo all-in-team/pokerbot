@@ -20,10 +20,14 @@ import {
   liveFrame, carryStacks, seatName, lastActionLabel, type PlayTable,
 } from "@/lib/client/playDriver.js";
 import {
-  emptyHumanStats, observeHand, readOf, FULL_CONFIDENCE_HANDS,
+  emptyHumanStats, observeHand, readOf, mergeHumanStats, FULL_CONFIDENCE_HANDS,
   type HumanStats, type HumanRead,
 } from "@/lib/client/humanModel.js";
 import { describeAdjustments } from "@/lib/client/exploitBot.js";
+import {
+  defaultProfileStore, createProfile, accumulateHand, lifetimeBb100,
+  type PlayerProfile,
+} from "@/lib/client/profileStore.js";
 
 const HERO = 0;
 const delay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -36,18 +40,23 @@ function btn(bg: string, fg = "#08130F"): React.CSSProperties {
 }
 
 export default function PlayPage() {
-  const statsHumanRef = useRef<HumanStats>(emptyHumanStats());
-  const tableRef = useRef<PlayTable>(createPlayTable({ heroSeat: HERO, seed: "play", getRead: () => readOf(statsHumanRef.current) }));
+  const store = useRef(defaultProfileStore()).current;
+  const profileBaseRef = useRef<HumanStats>(emptyHumanStats()); // lifetime model at session start
+  const sessionStatsRef = useRef<HumanStats>(emptyHumanStats()); // this session's delta
+  const profileRef = useRef<PlayerProfile | null>(null);
+  const tableRef = useRef<PlayTable>(createPlayTable({ heroSeat: HERO, seed: "play", getRead: () => readOf(mergeHumanStats(profileBaseRef.current, sessionStatsRef.current)) }));
   const stacksRef = useRef<number[]>(Array.from({ length: tableRef.current.seats }, () => tableRef.current.startingStack));
   const buttonRef = useRef(0);
   const handIdRef = useRef(0);
   const finalizedRef = useRef(-1);
-  const started = useRef(false);
   const busyRef = useRef(false);
   const speedRef = useRef(550);
 
   const table = tableRef.current;
   const [state, setState] = useState<GameState | null>(null);
+  const [profile, setProfile] = useState<PlayerProfile | null>(null);
+  const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
+  const [showPicker, setShowPicker] = useState(true);
   const [stats, setStats] = useState<Stats>({ handsPlayed: 0, handsWon: 0, netChips: 0 });
   const [read, setRead] = useState<HumanRead>(readOf(emptyHumanStats()));
   const [amount, setAmount] = useState(0);
@@ -58,19 +67,35 @@ export default function PlayPage() {
   speedRef.current = speed;
 
   const completeHand = useCallback((s: GameState) => {
-    // Update the human read from this hand (drives future-hand exploitation).
-    statsHumanRef.current = observeHand(statsHumanRef.current, s, HERO);
-    setRead(readOf(statsHumanRef.current));
-    // Session stats (once per hand).
+    // Accumulate exactly once per hand (the human model + session + profile).
     if (finalizedRef.current !== s.handId) {
       finalizedRef.current = s.handId;
+      // Fold this hand into the session delta; the bots' read = lifetime base + session.
+      sessionStatsRef.current = observeHand(sessionStatsRef.current, s, HERO);
+      const merged = mergeHumanStats(profileBaseRef.current, sessionStatsRef.current);
+      setRead(readOf(merged));
+
       const net = s.result?.net[HERO] ?? 0;
       setStats((p) => ({ handsPlayed: p.handsPlayed + 1, handsWon: p.handsWon + (net > 0 ? 1 : 0), netChips: p.netChips + net }));
+
+      // Persist into the active profile: lifetime tally + the remembered read model.
+      const cur = profileRef.current;
+      if (cur) {
+        const updated: PlayerProfile = {
+          ...cur,
+          stats: merged,
+          lifetime: accumulateHand(cur.lifetime, { net, bigBlind: tableRef.current.bigBlind }),
+          updatedAt: Date.now(),
+        };
+        profileRef.current = updated;
+        store.saveProfile(updated);
+        setProfile(updated);
+      }
     }
     // Reading delay so the reveal + result land before "Main suivante".
     setNextLock(true);
     setTimeout(() => setNextLock(false), 1200);
-  }, []);
+  }, [store]);
 
   // Step bots one at a time (animated), pausing `speed` ms between actions.
   const runBots = useCallback(async (start: GameState) => {
@@ -97,11 +122,47 @@ export default function PlayPage() {
     busyRef.current = false;
   }, [runBots]);
 
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
+  // Switch to a profile: load its lifetime model as the session base, reset the
+  // session, and start dealing. Called from the picker (create or choose).
+  const selectProfile = useCallback((p: PlayerProfile) => {
+    store.setActiveId(p.id);
+    profileRef.current = p;
+    profileBaseRef.current = p.stats; // bots "remember" this player from here
+    sessionStatsRef.current = emptyHumanStats();
+    stacksRef.current = Array.from({ length: tableRef.current.seats }, () => tableRef.current.startingStack);
+    buttonRef.current = 0;
+    handIdRef.current = 0;
+    finalizedRef.current = -1;
+    busyRef.current = false;
+    setProfile(p);
+    setStats({ handsPlayed: 0, handsWon: 0, netChips: 0 });
+    setRead(readOf(p.stats));
+    setShowPicker(false);
+    setState(null);
     void deal();
-  }, [deal]);
+  }, [deal, store]);
+
+  const createAndSelect = useCallback((name: string) => {
+    const p = createProfile(name);
+    store.saveProfile(p);
+    setProfiles(store.listProfiles());
+    selectProfile(p);
+  }, [selectProfile, store]);
+
+  const removeProfile = useCallback((id: string) => {
+    store.deleteProfile(id);
+    setProfiles(store.listProfiles());
+    if (profileRef.current?.id === id) {
+      profileRef.current = null;
+      setProfile(null);
+      setShowPicker(true);
+    }
+  }, [store]);
+
+  // Load the device's saved profiles on mount (no auto-deal: the player chooses first).
+  useEffect(() => {
+    setProfiles(store.listProfiles());
+  }, [store]);
 
   // Reset the bet slider when it becomes the hero's turn.
   useEffect(() => {
@@ -138,6 +199,23 @@ export default function PlayPage() {
     void deal();
   }, [state, nextLock, deal]);
 
+  // No profile yet → entry screen (create or choose).
+  if (!profile) {
+    return (
+      <main style={{ minHeight: "100dvh", background: C.appBg, color: C.text }}>
+        <TopNav />
+        <ProfilePicker
+          profiles={profiles}
+          activeId={null}
+          onSelect={selectProfile}
+          onCreate={createAndSelect}
+          onDelete={removeProfile}
+          dismissable={false}
+        />
+      </main>
+    );
+  }
+
   if (!state) {
     return (
       <main style={{ minHeight: "100dvh", background: C.appBg, color: C.text }}>
@@ -152,6 +230,8 @@ export default function PlayPage() {
   const frame = liveFrame(state, HERO);
   const heroNet = complete && state.result ? state.result.net[HERO] ?? 0 : 0;
   const bb100 = stats.handsPlayed > 0 ? (stats.netChips / table.bigBlind / stats.handsPlayed) * 100 : 0;
+  const lifeHands = profile.lifetime.handsPlayed;
+  const lifeBb100 = lifetimeBb100(profile.lifetime);
   const adjustments = describeAdjustments(read);
 
   let category = "";
@@ -193,9 +273,18 @@ export default function PlayPage() {
     <main style={{ minHeight: "100dvh", background: C.appBg, color: C.text }}>
       <TopNav
         right={
-          <span style={{ fontSize: 12.5, color: C.text2, fontVariantNumeric: "tabular-nums", padding: "6px 12px", borderRadius: 999, background: C.surface, border: `1px solid ${C.border}` }}>
-            {`$${table.smallBlind}/$${table.bigBlind} · ante $${table.ante} · main #${stats.handsPlayed + (complete ? 0 : 1)}`}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={() => { setProfiles(store.listProfiles()); setShowPicker(true); }}
+              style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: C.text, cursor: "pointer", padding: "6px 12px", borderRadius: 999, background: C.surface, border: `1px solid ${C.teal}55` }}
+              title="Changer de profil"
+            >
+              <span aria-hidden>👤</span>{profile.name}<span style={{ color: C.text3 }}>▾</span>
+            </button>
+            <span style={{ fontSize: 12.5, color: C.text2, fontVariantNumeric: "tabular-nums", padding: "6px 12px", borderRadius: 999, background: C.surface, border: `1px solid ${C.border}` }}>
+              {`$${table.smallBlind}/$${table.bigBlind} · ante $${table.ante} · main #${stats.handsPlayed + (complete ? 0 : 1)}`}
+            </span>
+          </div>
         }
       />
 
@@ -309,6 +398,24 @@ export default function PlayPage() {
             <Eyebrow>Session</Eyebrow>
             <Row label="Mains jouées" value={`${stats.handsPlayed}`} />
             <Row label="Mains gagnées" value={`${stats.handsWon}`} />
+            <Row label="Net" value={`${stats.netChips >= 0 ? "+" : ""}${stats.netChips}`} color={stats.netChips >= 0 ? C.teal : "#E2533B"} />
+            <Row label="bb/100" value={`${bb100 >= 0 ? "+" : ""}${bb100.toFixed(1)}`} />
+          </div>
+
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14 }}>
+            <Eyebrow>À vie · {profile.name}</Eyebrow>
+            {lifeHands > 0 ? (
+              <>
+                <Row label="Mains (total)" value={`${lifeHands}`} />
+                <Row label="Winrate" value={pct(profile.lifetime.handsWon / lifeHands)} />
+                <Row label="Net cumulé" value={`${profile.lifetime.netChips >= 0 ? "+" : ""}${profile.lifetime.netChips}`} color={profile.lifetime.netChips >= 0 ? C.teal : "#E2533B"} />
+                <Row label="bb/100 (à vie)" value={`${lifeBb100 >= 0 ? "+" : ""}${lifeBb100.toFixed(1)}`} color={lifeBb100 >= 0 ? C.teal : "#E2533B"} />
+              </>
+            ) : (
+              <p style={{ fontSize: 11.5, color: C.text3, margin: "6px 0 0", lineHeight: 1.5 }}>
+                Pas encore de main enregistrée pour ce profil — joue pour construire ton winrate à vie.
+              </p>
+            )}
           </div>
 
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14 }}>
@@ -353,7 +460,114 @@ export default function PlayPage() {
         </aside>
         </div>
       </div>
+
+      {/* Switch / create profile at any time. */}
+      {showPicker && (
+        <ProfilePicker
+          profiles={profiles}
+          activeId={profile.id}
+          onSelect={selectProfile}
+          onCreate={createAndSelect}
+          onDelete={removeProfile}
+          dismissable
+          onClose={() => setShowPicker(false)}
+        />
+      )}
     </main>
+  );
+}
+
+function ProfilePicker({
+  profiles, activeId, onSelect, onCreate, onDelete, dismissable, onClose,
+}: {
+  profiles: PlayerProfile[];
+  activeId: string | null;
+  onSelect: (p: PlayerProfile) => void;
+  onCreate: (name: string) => void;
+  onDelete: (id: string) => void;
+  dismissable: boolean;
+  onClose?: () => void;
+}) {
+  const [name, setName] = useState("");
+  const submit = () => {
+    const n = name.trim();
+    if (n) { onCreate(n); setName(""); }
+  };
+  return (
+    <div
+      onClick={() => dismissable && onClose?.()}
+      style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(8,11,16,0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 18, backdropFilter: "blur(2px)" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: 460, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 18, padding: 22, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>Profils joueur</h2>
+          {dismissable && (
+            <button onClick={() => onClose?.()} style={{ background: "none", border: "none", color: C.text3, fontSize: 20, cursor: "pointer", lineHeight: 1 }} aria-label="Fermer">×</button>
+          )}
+        </div>
+        <p style={{ margin: "0 0 16px", fontSize: 12.5, color: C.text2, lineHeight: 1.5 }}>
+          Tes stats à vie et la lecture des bots sont sauvegardées sur cet appareil. Reprends un profil ou crée-en un nouveau.
+        </p>
+
+        {profiles.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16, maxHeight: 280, overflowY: "auto" }}>
+            {profiles.map((p) => {
+              const life = lifetimeBb100(p.lifetime);
+              const active = p.id === activeId;
+              return (
+                <div
+                  key={p.id}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, background: C.appBg, border: `1px solid ${active ? `${C.teal}77` : C.border}` }}
+                >
+                  <button
+                    onClick={() => onSelect(p)}
+                    style={{ flex: 1, textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                      {p.name}{active && <span style={{ color: C.teal, fontWeight: 600, fontSize: 11, marginLeft: 8 }}>actif</span>}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: C.text3, fontVariantNumeric: "tabular-nums", marginTop: 2 }}>
+                      {p.lifetime.handsPlayed} mains · net {p.lifetime.netChips >= 0 ? "+" : ""}{p.lifetime.netChips} · {life >= 0 ? "+" : ""}{life.toFixed(1)} bb/100
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => onDelete(p.id)}
+                    style={{ background: "none", border: `1px solid ${C.border}`, color: C.text3, borderRadius: 8, width: 30, height: 30, cursor: "pointer", fontSize: 15, flex: "0 0 auto" }}
+                    aria-label={`Supprimer ${p.name}`}
+                    title="Supprimer ce profil"
+                  >×</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div style={{ fontSize: 11, color: C.text3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8 }}>
+          {profiles.length > 0 ? "Ou crée un nouveau profil" : "Crée ton premier profil"}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            placeholder="Ton pseudo"
+            maxLength={24}
+            autoFocus
+            style={{ flex: 1, background: C.appBg, border: `1px solid ${C.border}`, borderRadius: 11, color: C.text, fontSize: 14, padding: "0 14px", height: 44, outline: "none" }}
+          />
+          <button
+            onClick={submit}
+            disabled={!name.trim()}
+            style={{ ...btn(C.teal), opacity: name.trim() ? 1 : 0.5, cursor: name.trim() ? "pointer" : "default" }}
+          >
+            Créer
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

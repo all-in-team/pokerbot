@@ -114,6 +114,25 @@ export function observeHand(prev: HumanStats, state: GameState, humanSeat: Seat)
   return s;
 }
 
+const mergeRatio = (a: Ratio, b: Ratio): Ratio => ({ n: a.n + b.n, d: a.d + b.d });
+
+/**
+ * Sum two human models into one (e.g. a profile's lifetime base + the current
+ * session's delta). Ratios and counters add component-wise, so derived rates and
+ * the sample-size weight reflect the combined observation. Pure.
+ */
+export function mergeHumanStats(a: HumanStats, b: HumanStats): HumanStats {
+  return {
+    hands: a.hands + b.hands,
+    vpip: mergeRatio(a.vpip, b.vpip),
+    pfr: mergeRatio(a.pfr, b.pfr),
+    foldTo3bet: mergeRatio(a.foldTo3bet, b.foldTo3bet),
+    foldToCbet: mergeRatio(a.foldToCbet, b.foldToCbet),
+    aggr: { bets: a.aggr.bets + b.aggr.bets, calls: a.aggr.calls + b.aggr.calls },
+    wtsd: mergeRatio(a.wtsd, b.wtsd),
+  };
+}
+
 const rate = (r: Ratio) => (r.d > 0 ? r.n / r.d : 0);
 
 export function readOf(s: HumanStats): HumanRead {
