@@ -8,9 +8,9 @@
  */
 
 import { applyAction, createHand, getLegalActions, type HandConfig } from "../engine/engine.js";
-import { pot, type GameState, type Seat, type Street } from "../engine/state.js";
+import { pot, type AtLeastTwo, type GameState, type Seat, type Street } from "../engine/state.js";
 import type { ActionInput } from "../engine/actions.js";
-import type { Bot, DecisionView, Position } from "../bots/types.js";
+import type { Bot, DecisionView, OpponentView, Position } from "../bots/types.js";
 
 export interface DecisionRecord {
   index: number;
@@ -30,17 +30,36 @@ export interface HandLog {
   state: GameState;
   /** Per-decision metadata, parallel to the voluntary actions taken. */
   decisions: DecisionRecord[];
-  /** Hole cards as dealt, by seat (kept explicitly for replay/logging). */
-  holeCards: [string[], string[]];
+  /** Hole cards as dealt, indexed by seat (length = player count). */
+  holeCards: string[][];
 }
 
 function positionOf(state: GameState, seat: Seat): Position {
   return seat === state.button ? "button" : "bigBlind";
 }
 
+/** Public state of every OTHER seat, in seat order. */
+function opponentsOf(state: GameState, seat: Seat): OpponentView[] {
+  const out: OpponentView[] = [];
+  for (const p of state.players) {
+    if (p.seat === seat) continue;
+    out.push({
+      seat: p.seat,
+      position: state.positions[p.seat]!,
+      stack: p.stack,
+      committedThisStreet: p.committedThisStreet,
+      committedTotal: p.committedTotal,
+      folded: p.folded,
+      allIn: p.allIn,
+    });
+  }
+  return out;
+}
+
 function buildView(state: GameState, seat: Seat): DecisionView {
   const me = state.players[seat]!;
-  const opp = state.players[seat === 0 ? 1 : 0]!;
+  const opponents = opponentsOf(state, seat);
+  const firstOpp = opponents[0]; // heads-up convenience for legacy fields
   const legal = getLegalActions(state);
   return {
     handId: state.handId,
@@ -52,12 +71,17 @@ function buildView(state: GameState, seat: Seat): DecisionView {
     pot: pot(state),
     toCall: legal.toCall,
     myStack: me.stack,
-    oppStack: opp.stack,
+    oppStack: firstOpp?.stack ?? 0,
     myCommittedThisStreet: me.committedThisStreet,
-    oppCommittedThisStreet: opp.committedThisStreet,
+    oppCommittedThisStreet: firstOpp?.committedThisStreet ?? 0,
     bigBlind: state.bigBlind,
     legal,
     actionHistory: state.actionHistory,
+    // Multiway context:
+    tablePosition: state.positions[seat]!,
+    opponents,
+    numPlayers: state.players.length,
+    activePlayers: state.players.filter((p) => !p.folded).length,
   };
 }
 
@@ -66,17 +90,14 @@ export interface PlayHandHooks {
   onDecision?: (record: DecisionRecord, state: GameState) => void | Promise<void>;
 }
 
-/** Play a single hand to completion. */
+/** Play a single hand to completion. Seats `bots[i]` at seat `i` (2..6 bots). */
 export async function playHand(
   config: HandConfig,
-  bots: [Bot, Bot],
+  bots: Bot[],
   hooks: PlayHandHooks = {},
 ): Promise<HandLog> {
   let state = createHand(config);
-  const holeCards: [string[], string[]] = [
-    [...state.players[0].holeCards],
-    [...state.players[1].holeCards],
-  ];
+  const holeCards: string[][] = state.players.map((p) => [...p.holeCards]);
   const decisions: DecisionRecord[] = [];
   let guard = 0;
 
@@ -167,6 +188,86 @@ export async function playSession(
     net[1] += result.net[1];
     stacks = [log.state.players[0].stack, log.state.players[1].stack];
     button = (button === 0 ? 1 : 0) as Seat;
+    played++;
+    if (hooks.onHand) await hooks.onHand(log, h);
+  }
+
+  return { hands, net, finalStacks: stacks, handsPlayed: played };
+}
+
+// --- Multiway (2..6 players) ------------------------------------------------
+
+export interface RingSessionConfig {
+  seed: string;
+  smallBlind: number;
+  bigBlind: number;
+  /** Ante posted by every player each hand (default 0). */
+  ante?: number;
+  /** One starting stack per seat; length sets the table size (2..6). */
+  startingStacks: number[];
+  hands: number;
+  /** Re-buy every seat to its starting stack each hand (cash-game style). */
+  rebuy?: boolean;
+}
+
+export interface RingSessionResult {
+  hands: HandLog[];
+  /** Cumulative net chips per seat across the session. */
+  net: number[];
+  finalStacks: number[];
+  handsPlayed: number;
+}
+
+/**
+ * Play a ring session of N hands with `bots.length` seats (2..6). The button
+ * rotates one seat per hand. Stacks carry over unless `rebuy` is set; the
+ * session stops early if any seat can't post the big blind (and rebuy is off).
+ */
+export async function playRingSession(
+  config: RingSessionConfig,
+  bots: Bot[],
+  hooks: PlayHandHooks & { onHand?: (log: HandLog, index: number) => void | Promise<void> } = {},
+): Promise<RingSessionResult> {
+  const n = bots.length;
+  if (n < 2 || n > 6) throw new Error(`playRingSession: need 2..6 bots, got ${n}`);
+  if (config.startingStacks.length !== n) {
+    throw new Error(`playRingSession: ${config.startingStacks.length} stacks for ${n} bots`);
+  }
+
+  const hands: HandLog[] = [];
+  const net = new Array<number>(n).fill(0);
+  let stacks = [...config.startingStacks];
+  let button: Seat = 0;
+  let played = 0;
+
+  for (let h = 0; h < config.hands; h++) {
+    if (config.rebuy) stacks = [...config.startingStacks];
+    if (Math.min(...stacks) < config.bigBlind) break;
+
+    const players = stacks.map((stack, i) => ({ name: bots[i]!.name, stack })) as AtLeastTwo<{
+      name: string;
+      stack: number;
+    }>;
+
+    const log = await playHand(
+      {
+        handId: h,
+        seed: config.seed,
+        button,
+        smallBlind: config.smallBlind,
+        bigBlind: config.bigBlind,
+        ante: config.ante ?? 0,
+        players,
+      },
+      bots,
+      hooks,
+    );
+
+    hands.push(log);
+    const result = log.state.result!;
+    for (let i = 0; i < n; i++) net[i]! += result.net[i]!;
+    stacks = log.state.players.map((p) => p.stack);
+    button = ((button + 1) % n) as Seat;
     played++;
     if (hooks.onHand) await hooks.onHand(log, h);
   }

@@ -8,10 +8,25 @@
  */
 
 import type { Card } from "../engine/cards.js";
-import type { Action, Seat, Street } from "../engine/state.js";
+import type { Action, Position as TablePosition, Seat, Street } from "../engine/state.js";
 import type { ActionInput, LegalActions } from "../engine/actions.js";
 
+/** Legacy binary position (heads-up). Kept for the HU reasoning prompts. */
 export type Position = "button" | "bigBlind";
+
+/** 6-max table position label (BTN/SB/BB/UTG/HJ/CO). Re-export of engine type. */
+export type { TablePosition };
+
+/** Public, legitimately-known info about one opponent at the table. */
+export interface OpponentView {
+  seat: Seat;
+  position: TablePosition;
+  stack: number;
+  committedThisStreet: number;
+  committedTotal: number;
+  folded: boolean;
+  allIn: boolean;
+}
 
 export interface DecisionView {
   handId: number;
@@ -31,6 +46,16 @@ export interface DecisionView {
   bigBlind: number;
   legal: LegalActions;
   actionHistory: Action[];
+
+  // --- Multiway view (populated by the ring runner; absent ⇒ treat as heads-up).
+  /** The hero's real table position. */
+  tablePosition?: TablePosition;
+  /** Every OTHER seat's public state, in seat order. */
+  opponents?: OpponentView[];
+  /** Total seats dealt this hand (2..6). */
+  numPlayers?: number;
+  /** Seats still in the hand (not folded), hero included. */
+  activePlayers?: number;
 }
 
 export interface Decision {

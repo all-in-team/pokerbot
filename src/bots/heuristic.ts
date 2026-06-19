@@ -13,7 +13,24 @@ import { evaluate } from "../engine/evaluator.js";
 import { rankValue, type Card } from "../engine/cards.js";
 import { createRng, type Rng } from "../engine/rng.js";
 import { clampToLegal, sizeToFromPotFraction } from "./util.js";
-import type { Bot, Decision, DecisionView } from "./types.js";
+import type { Bot, Decision, DecisionView, TablePosition } from "./types.js";
+
+/**
+ * Positional looseness, 0 (earliest, tightest) … 1 (button, loosest). Heads-up
+ * is disambiguated by player count: there the SB *is* the button (in position).
+ */
+function positionLooseness(pos: TablePosition, numPlayers: number): number {
+  if (numPlayers === 2) return pos === "SB" ? 0.95 : 0.45; // HU: SB = button
+  switch (pos) {
+    case "UTG": return 0.0;
+    case "HJ": return 0.3;
+    case "CO": return 0.6;
+    case "BTN": return 1.0;
+    case "SB": return 0.25; // blind, out of position post-flop
+    case "BB": return 0.4;
+    default: return 0.4;
+  }
+}
 
 export interface HeuristicConfig {
   name: string;
@@ -95,50 +112,65 @@ export function createHeuristicBot(config: HeuristicConfig): Bot {
     const aggr = config.aggression;
     const currentBet = view.myCommittedThisStreet + view.toCall;
 
-    // Preflop fold bar scales with tightness; postflop is governed by made hands.
-    const foldBar = view.street === "preflop" ? 0.28 + config.tightness * 0.32 : 0;
+    // --- Multiway / positional context (HU fallback when fields are absent). ---
+    const numPlayers = view.numPlayers ?? 2;
+    const activePlayers = view.activePlayers ?? 2;
+    const tablePos: TablePosition = view.tablePosition ?? (view.position === "button" ? "SB" : "BB");
+    const looseness = positionLooseness(tablePos, numPlayers);
+    // Opponents still contesting the pot (hero excluded).
+    const oppsInHand = Math.max(1, activePlayers - 1);
+    // Each extra live opponent demands more strength: multiway pots favour made
+    // hands, and bluffs must get through more players, so they shrink fast.
+    const multiwayPenalty = (oppsInHand - 1) * 0.07;
+    const bluffScale = 1 / oppsInHand;
+    const canAggress = legal.canBet || legal.canRaise;
 
     let intent;
     let reasoning: string;
 
     if (view.toCall > 0) {
-      // Facing a bet. Compare strength to the pot odds we're being laid.
+      // Facing a bet. Compare strength to pot odds, gated by position & field size.
       const potOdds = view.toCall / (view.pot + view.toCall);
-      if (strength > 0.82) {
-        // Strong: raise for value (sometimes just call to trap when very strong).
-        if (rng.next() < 0.75 && (legal.canRaise || legal.canBet)) {
-          const to = sizeToFromPotFraction(0.6 + aggr * 0.5, view.pot, view.myCommittedThisStreet, currentBet, legal);
-          intent = { type: legal.aggressiveType, to } as const;
-          reasoning = `Strong hand (${(strength * 100) | 0}%); raising for value.`;
-        } else {
-          intent = { type: "call" } as const;
-          reasoning = `Very strong; flat-calling to keep the bluffs in.`;
-        }
-      } else if (strength > potOdds + 0.06 || (view.street === "preflop" && strength > foldBar)) {
+      const valueBar = 0.82 + multiwayPenalty * 0.5;
+      const callBar = potOdds + 0.06 + multiwayPenalty;
+      // Preflop continuation: looser in late position, tighter multiway.
+      const preflopPlayBar = 0.30 + config.tightness * 0.34 - looseness * 0.2 + multiwayPenalty;
+
+      if (strength > valueBar && canAggress && rng.next() < 0.75) {
+        const to = sizeToFromPotFraction(0.6 + aggr * 0.5, view.pot, view.myCommittedThisStreet, currentBet, legal);
+        intent = { type: legal.aggressiveType, to } as const;
+        reasoning = `Strong hand (${(strength * 100) | 0}%) vs ${oppsInHand}; raising for value.`;
+      } else if (strength > valueBar) {
         intent = { type: "call" } as const;
-        reasoning = `Hand (${(strength * 100) | 0}%) beats the ${(potOdds * 100) | 0}% pot odds; calling.`;
-      } else if (rng.next() < config.bluffFreq * 0.5 && (legal.canRaise || legal.canBet)) {
+        reasoning = `Very strong; flat-calling to keep bluffs in.`;
+      } else if (
+        (view.street !== "preflop" && strength > callBar) ||
+        (view.street === "preflop" && strength > preflopPlayBar)
+      ) {
+        intent = { type: "call" } as const;
+        reasoning = `Hand (${(strength * 100) | 0}%) good enough vs ${oppsInHand} (odds ${(potOdds * 100) | 0}%, ${tablePos}); calling.`;
+      } else if (oppsInHand === 1 && rng.next() < config.bluffFreq * 0.5 * bluffScale && canAggress) {
         const to = sizeToFromPotFraction(0.7, view.pot, view.myCommittedThisStreet, currentBet, legal);
         intent = { type: legal.aggressiveType, to } as const;
-        reasoning = `Weak but representing strength — bluff-raising.`;
+        reasoning = `Heads-up in the hand — bluff-raising.`;
       } else {
         intent = { type: "fold" } as const;
-        reasoning = `Hand too weak (${(strength * 100) | 0}%) for the price; folding.`;
+        reasoning = `Too weak (${(strength * 100) | 0}%) vs ${oppsInHand} for the price; folding.`;
       }
     } else {
-      // No bet to call: check or bet.
-      const valueBar = 0.55 - aggr * 0.1;
-      if (strength > valueBar && (legal.canBet || legal.canRaise)) {
+      // No bet to call: check or bet. Stronger bar & fewer stabs when multiway.
+      const valueBar = 0.55 - aggr * 0.1 + multiwayPenalty;
+      if (strength > valueBar && canAggress) {
         const to = sizeToFromPotFraction(0.5 + aggr * 0.35, view.pot, view.myCommittedThisStreet, currentBet, legal);
         intent = { type: legal.aggressiveType, to } as const;
-        reasoning = `Betting ${(strength * 100) | 0}%-strength hand for value.`;
-      } else if (rng.next() < config.bluffFreq * (0.5 + aggr * 0.5) && (legal.canBet || legal.canRaise)) {
+        reasoning = `Betting ${(strength * 100) | 0}%-strength hand for value vs ${oppsInHand}.`;
+      } else if (oppsInHand === 1 && rng.next() < config.bluffFreq * (0.5 + aggr * 0.5) * bluffScale && canAggress) {
         const to = sizeToFromPotFraction(0.5, view.pot, view.myCommittedThisStreet, currentBet, legal);
         intent = { type: legal.aggressiveType, to } as const;
-        reasoning = `No showdown value — taking a stab at the pot.`;
+        reasoning = `No showdown value, one opponent — taking a stab.`;
       } else {
         intent = { type: "check" } as const;
-        reasoning = `Checking with a ${(strength * 100) | 0}%-strength hand.`;
+        reasoning = `Checking a ${(strength * 100) | 0}%-strength hand (${tablePos}).`;
       }
     }
 

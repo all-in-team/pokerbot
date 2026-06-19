@@ -10,7 +10,7 @@
  *        --stacks N  --sb N  --bb N  --carry (carry stacks; default re-buys)  --no-db
  */
 
-import { playSession } from "./match.js";
+import { playSession, playRingSession } from "./match.js";
 import { heuristicFromPersonality, type PersonalityName } from "../bots/heuristic.js";
 import { openDb, insertMatch, insertHands, countHands } from "../db/db.js";
 import { computeHudStats, handLogToStats, formatHud } from "./hud.js";
@@ -22,6 +22,65 @@ function arg(name: string, fallback: string): string {
 }
 const flag = (name: string) => process.argv.includes(`--${name}`);
 
+const RING_PERSONALITIES: PersonalityName[] = ["TAG", "LAG", "nit", "maniac", "TAG", "LAG"];
+
+/** Multiway (3..6 seats) self-play: ring session + conservation/net report. */
+async function runRing(opts: {
+  seats: number;
+  hands: number;
+  seed: string;
+  sb: number;
+  bb: number;
+  startingStack: number;
+  carry: boolean;
+}): Promise<void> {
+  const { seats, hands, seed, sb, bb, startingStack, carry } = opts;
+  const bots = Array.from({ length: seats }, (_, i) => {
+    const p = RING_PERSONALITIES[i % RING_PERSONALITIES.length]!;
+    return heuristicFromPersonality(`${p}-${i}`, p, `${seed}:bot${i}`);
+  });
+
+  console.log(`\n♠ Ring self-play: ${seats}-max heuristic`);
+  console.log(`  ${bots.map((b) => b.name).join(", ")}`);
+  console.log(`  ${hands} hands · blinds ${sb}/${bb} · ante ${bb} · stacks ${startingStack} · ${carry ? "carried" : "re-buy"}\n`);
+
+  const t0 = Date.now();
+  const result = await playRingSession(
+    {
+      seed,
+      smallBlind: sb,
+      bigBlind: bb,
+      ante: bb,
+      startingStacks: Array.from({ length: seats }, () => startingStack),
+      hands,
+      rebuy: !carry,
+    },
+    bots,
+  );
+  const ms = Date.now() - t0;
+
+  let conserved = 0;
+  let zeroSum = true;
+  let showdowns = 0;
+  for (const log of result.hands) {
+    const start = log.config.players.reduce((a, p) => a + p.stack, 0);
+    const end = log.state.players.reduce((a, p) => a + p.stack, 0);
+    if (start === end) conserved++;
+    if (log.state.result!.net.reduce((a, b) => a + b, 0) !== 0) zeroSum = false;
+    if (log.state.result!.showdown) showdowns++;
+  }
+  const ok = conserved === result.handsPlayed && zeroSum;
+  const played = Math.max(1, result.handsPlayed);
+
+  console.log(`Played ${result.handsPlayed} hands in ${ms}ms (${(result.handsPlayed / (ms / 1000)).toFixed(0)} hands/s)`);
+  console.log(`Showdowns: ${showdowns} (${((showdowns / played) * 100).toFixed(1)}%)`);
+  console.log(`Chip conservation: ${ok ? "✓ PASS" : "✗ FAIL"} (${conserved}/${result.handsPlayed} balanced, zero-sum=${zeroSum})`);
+  result.net.forEach((net, i) => {
+    console.log(`  ${bots[i]!.name.padEnd(10)} ${net >= 0 ? "+" : ""}${net} chips (${(net / bb).toFixed(1)} bb)`);
+  });
+  if (!ok) process.exitCode = 1;
+}
+
 async function main() {
   const hands = parseInt(arg("hands", "1000"), 10);
   const seed = arg("seed", "selfplay");
@@ -32,6 +91,13 @@ async function main() {
   const bb = parseInt(arg("bb", "2"), 10);
   const carry = flag("carry");
   const useDb = !flag("no-db");
+  const seats = parseInt(arg("seats", "2"), 10);
+
+  // Multiway (3..6 seats): run a ring session and report conservation + net.
+  if (seats > 2) {
+    await runRing({ seats, hands, seed, sb, bb, startingStack, carry });
+    return;
+  }
 
   const bots: [ReturnType<typeof heuristicFromPersonality>, ReturnType<typeof heuristicFromPersonality>] = [
     heuristicFromPersonality(`${p0}-0`, p0, `${seed}:bot0`),
