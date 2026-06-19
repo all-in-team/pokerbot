@@ -1,0 +1,127 @@
+[
+  {
+    "id": "bb-defense-qs7d2c",
+    "axis": "BB defense vs c-bet",
+    "stakes": { "sb": 1, "bb": 2, "ante": 2 },
+    "heroId": "bb",
+    "players": [
+      { "id": "sb", "name": "Sara", "pos": "SB", "stack": 197, "folded": true },
+      { "id": "bb", "name": "Toi", "pos": "BB", "stack": 193 },
+      { "id": "utg", "name": "Max", "pos": "UTG", "stack": 198, "folded": true },
+      { "id": "hj", "name": "Joy", "pos": "HJ", "stack": 198, "folded": true },
+      { "id": "co", "name": "Léo", "pos": "CO", "stack": 198, "folded": true },
+      { "id": "btn", "name": "Ivan", "pos": "BTN", "stack": 185, "dealer": true, "bet": 8 }
+    ],
+    "board": ["Qs", "7d", "2c"],
+    "heroCards": ["8h", "8d"],
+    "pot": 31,
+    "toCall": 8,
+    "minRaise": 16,
+    "solution": {
+      "mode": "gto",
+      "bestAction": "call",
+      "actions": [
+        { "action": "fold", "frequency": 0, "ev": 0 },
+        { "action": "call", "frequency": 0, "ev": 0 },
+        { "action": "raise", "sizing": 16, "frequency": 0, "ev": 0 }
+      ],
+      "source": "PLACEHOLDER — TODO import PioSOLVER/GTO Wizard export (bestAction/frequency/ev)"
+    }
+  },
+  {
+    "id": "bb-defense-9h8h2s-semibluff",
+    "axis": "BB defense vs c-bet (semi-bluff spot)",
+    "stakes": { "sb": 1, "bb": 2, "ante": 2 },
+    "heroId": "bb",
+    "players": [
+      { "id": "sb", "name": "Sara", "pos": "SB", "stack": 197, "folded": true },
+      { "id": "bb", "name": "Toi", "pos": "BB", "stack": 193 },
+      { "id": "utg", "name": "Max", "pos": "UTG", "stack": 198, "folded": true },
+      { "id": "hj", "name": "Joy", "pos": "HJ", "stack": 198, "folded": true },
+      { "id": "co", "name": "Léo", "pos": "CO", "stack": 198, "folded": true },
+      { "id": "btn", "name": "Ivan", "pos": "BTN", "stack": 187, "dealer": true, "bet": 6 }
+    ],
+    "board": ["9h", "8h", "2s"],
+    "heroCards": ["Ts", "Js"],
+    "pot": 29,
+    "toCall": 6,
+    "minRaise": 12,
+    "solution": {
+      "mode": "gto",
+      "bestAction": "raise",
+      "actions": [
+        { "action": "fold", "frequency": 0, "ev": 0 },
+        { "action": "call", "frequency": 0, "ev": 0 },
+        { "action": "raise", "sizing": 12, "frequency": 0, "ev": 0 }
+      ],
+      "source": "PLACEHOLDER — TODO import PioSOLVER/GTO Wizard export (bestAction/frequency/ev)"
+    }
+  },
+  {
+    "id": "bb-defense-ah7c3d-toppair",
+    "axis": "BB defense vs big c-bet (top pair)",
+    "stakes": { "sb": 1, "bb": 2, "ante": 2 },
+    "heroId": "bb",
+    "players": [
+      { "id": "sb", "name": "Sara", "pos": "SB", "stack": 197, "folded": true },
+      { "id": "bb", "name": "Toi", "pos": "BB", "stack": 193 },
+      { "id": "utg", "name": "Max", "pos": "UTG", "stack": 198, "folded": true },
+      { "id": "hj", "name": "Joy", "pos": "HJ", "stack": 198, "folded": true },
+      { "id": "co", "name": "Léo", "pos": "CO", "stack": 198, "folded": true },
+      { "id": "btn", "name": "Ivan", "pos": "BTN", "stack": 182, "dealer": true, "bet": 11 }
+    ],
+    "board": ["Ah", "7c", "3d"],
+    "heroCards": ["Ac", "Tc"],
+    "pot": 34,
+    "toCall": 11,
+    "minRaise": 22,
+    "solution": {
+      "mode": "gto",
+      "bestAction": "call",
+      "actions": [
+        { "action": "fold", "frequency": 0, "ev": 0 },
+        { "action": "call", "frequency": 0, "ev": 0 },
+        { "action": "raise", "sizing": 22, "frequency": 0, "ev": 0 }
+      ],
+      "source": "PLACEHOLDER — TODO import PioSOLVER/GTO Wizard export (bestAction/frequency/ev)"
+    }
+  },
+  {
+    "id": "exploit-cs-bb-defense-qs7d2c",
+    "axis": "BB defense vs c-bet (exploit)",
+    "stakes": { "sb": 1, "bb": 2, "ante": 2 },
+    "heroId": "bb",
+    "players": [
+      { "id": "sb", "name": "Sara", "pos": "SB", "stack": 197, "folded": true },
+      { "id": "bb", "name": "Toi", "pos": "BB", "stack": 193 },
+      { "id": "utg", "name": "Max", "pos": "UTG", "stack": 198, "folded": true },
+      { "id": "hj", "name": "Joy", "pos": "HJ", "stack": 198, "folded": true },
+      { "id": "co", "name": "Léo", "pos": "CO", "stack": 198, "folded": true },
+      { "id": "btn", "name": "Ivan", "pos": "BTN", "stack": 185, "dealer": true, "bet": 8 }
+    ],
+    "board": ["Qs", "7d", "2c"],
+    "heroCards": ["8h", "8d"],
+    "pot": 31,
+    "toCall": 8,
+    "minRaise": 16,
+    "solution": {
+      "mode": "exploit",
+      "vsProfile": "calling-station",
+      "bestAction": "call",
+      "actions": [
+        { "action": "fold", "frequency": 0, "ev": 0 },
+        { "action": "call", "frequency": 0, "ev": 0 },
+        { "action": "raise", "sizing": 16, "frequency": 0, "ev": 0 }
+      ],
+      "baselineGto": {
+        "bestAction": "call",
+        "actions": [
+          { "action": "fold", "frequency": 0, "ev": 0 },
+          { "action": "call", "frequency": 0, "ev": 0 },
+          { "action": "raise", "sizing": 16, "frequency": 0, "ev": 0 }
+        ]
+      },
+      "source": "PLACEHOLDER — TODO importer best-response vs Calling station (PioSOLVER node-lock)"
+    }
+  }
+]

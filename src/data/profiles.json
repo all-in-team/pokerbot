@@ -1,0 +1,23 @@
+[
+  {
+    "id": "calling-station",
+    "name": "Calling station",
+    "description": "Paie très large et se couche rarement ; agression et bluffs minimes.",
+    "tendencies": { "foldToCbet": 0, "vpip": 0, "raiseFreq": 0, "bluffFreq": 0 },
+    "source": "PLACEHOLDER — TODO importer un profil réel (HUD / population)"
+  },
+  {
+    "id": "nit",
+    "name": "Nit",
+    "description": "Très serré et passif ; se couche beaucoup face à l'agression, n'engage gros qu'avec du très fort.",
+    "tendencies": { "foldToCbet": 0, "vpip": 0, "raiseFreq": 0, "bluffFreq": 0 },
+    "source": "PLACEHOLDER — TODO importer un profil réel (HUD / population)"
+  },
+  {
+    "id": "tag-reg",
+    "name": "TAG reg",
+    "description": "Régulier tight-aggressive, proche de l'équilibre ; peu de tendances exploitables marquées.",
+    "tendencies": { "foldToCbet": 0, "vpip": 0, "raiseFreq": 0, "bluffFreq": 0 },
+    "source": "PLACEHOLDER — TODO importer un profil réel (HUD / population)"
+  }
+]

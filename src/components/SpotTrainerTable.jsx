@@ -1,15 +1,20 @@
 import React, { useMemo, useState } from "react";
+import { scoreAttempt, VERDICT_META } from "@/lib/score.js";
+import { getProfile, isProfilePlaceholder } from "@/lib/profiles.js";
 
 /**
- * PokerTable — composant de TABLE pour un Spot Trainer (outil d'ÉTUDE).
+ * SpotTrainerTable — composant de TABLE pour un Spot Trainer (outil d'ÉTUDE).
  *
- * L'élève voit un spot, choisit une action, PUIS reçoit un feedback.
- * Ce composant n'invente JAMAIS de verdict GTO ni de fréquences : quand
- * l'élève agit, on affiche seulement son action + une note rappelant que la
- * vérité GTO vient de la couche solver (en aval).
+ * 100 % data-driven : tout l'affichage est dérivé de la prop `spot` (type `Spot`
+ * de src/lib/spots.ts). Le composant ne contient AUCUNE coordonnée de table dans
+ * les données — il garde un mapping interne pos → siège (SEAT_XY).
  *
- * 100 % data-driven : remplace simplement l'objet `spot` (props `spot`) par un
- * spot issu de ta librairie solver. Aucune prop n'est obligatoire.
+ * Le feedback (verdict, fréquences, EV) est TIRÉ de `spot.solution`, c.-à-d. la
+ * vérité solver stockée. Ce composant ne calcule JAMAIS la GTO : il compare
+ * l'action de l'élève à `spot.solution.bestAction` et affiche les nombres tels
+ * quels. Si la solution n'est pas encore importée (placeholder), il le dit au
+ * lieu d'afficher des « 0 % » comme s'ils étaient vrais.
+ *
  * React + styles inline (positionnement absolu des sièges), zéro dépendance
  * externe, pas de localStorage.
  */
@@ -37,34 +42,44 @@ const SEAT_XY = {
   SB: { x: 89, y: 62 },
 };
 
+const ACTION_LABEL = { fold: "Fold", call: "Call", raise: "Raise" };
+
+/** "8h" → { r: "8", s: "h" } ; "Ts" → { r: "T", s: "s" }. */
+const parseCard = (str) => ({ r: str.slice(0, -1), s: str.slice(-1) });
+
 // ───────────────────────── SPOT PAR DÉFAUT ─────────────────────────
 // Défense BB face au c-bet du BTN. $1/$2 ante $2, 6-max — notation 1/2(2).
 // Préflop : BTN open 5, SB fold, BB call → pot 23. Flop Qs7d2c.
 // BTN c-bet 8 → pot 31, à payer 8. Héros = 8h 8d.
+// Miroir du premier spot de src/data/spots.json — solution PLACEHOLDER.
 const DEFAULT_SPOT = {
-  stakes: { sb: 1, bb: 2, ante: 2, seats: 6 },
+  id: "bb-defense-qs7d2c",
+  axis: "BB defense vs c-bet",
+  stakes: { sb: 1, bb: 2, ante: 2 },
+  heroId: "bb",
   players: [
-    { id: "sb", pos: "SB", name: "Sara", stack: 197, folded: true },
-    { id: "bb", pos: "BB", name: "Toi", stack: 193, hero: true, folded: false },
-    { id: "utg", pos: "UTG", name: "Max", stack: 198, folded: true },
-    { id: "hj", pos: "HJ", name: "Joy", stack: 198, folded: true },
-    { id: "co", pos: "CO", name: "Léo", stack: 198, folded: true },
-    // BTN a misé son c-bet de 8 (déjà déduit du stack : 200-2-5-8 = 185).
-    { id: "btn", pos: "BTN", name: "Ivan", stack: 185, folded: false, bet: 8 },
+    { id: "sb", name: "Sara", pos: "SB", stack: 197, folded: true },
+    { id: "bb", name: "Toi", pos: "BB", stack: 193 },
+    { id: "utg", name: "Max", pos: "UTG", stack: 198, folded: true },
+    { id: "hj", name: "Joy", pos: "HJ", stack: 198, folded: true },
+    { id: "co", name: "Léo", pos: "CO", stack: 198, folded: true },
+    { id: "btn", name: "Ivan", pos: "BTN", stack: 185, dealer: true, bet: 8 },
   ],
-  board: [
-    { r: "Q", s: "s" },
-    { r: "7", s: "d" },
-    { r: "2", s: "c" },
-  ],
-  heroCards: [
-    { r: "8", s: "h" },
-    { r: "8", s: "d" },
-  ],
-  pot: 31, // 23 (au flop) + 8 (c-bet)
-  toCall: 8, // c-bet à payer
-  heroStack: 193,
-  minRaise: 16, // mise 8 → relance min à 16
+  board: ["Qs", "7d", "2c"],
+  heroCards: ["8h", "8d"],
+  pot: 31,
+  toCall: 8,
+  minRaise: 16,
+  solution: {
+    mode: "gto",
+    bestAction: "call",
+    actions: [
+      { action: "fold", frequency: 0, ev: 0 },
+      { action: "call", frequency: 0, ev: 0 },
+      { action: "raise", sizing: 16, frequency: 0, ev: 0 },
+    ],
+    source: "PLACEHOLDER — TODO import PioSOLVER/GTO Wizard export",
+  },
 };
 
 // ─────────────────────────── PRIMITIVES UI ───────────────────────────
@@ -188,10 +203,9 @@ function Chip({ amount, tone = "#334155", label }) {
 }
 
 /** Un siège positionné en absolu autour de l'ovale. */
-function Seat({ player, isHeroTurn, heroCards }) {
+function Seat({ player, isHero, isHeroTurn, heroCards, ante }) {
   const { x, y } = SEAT_XY[player.pos];
   const folded = player.folded;
-  const isHero = !!player.hero;
   const highlight = isHero && isHeroTurn;
 
   return (
@@ -309,7 +323,7 @@ function Seat({ player, isHeroTurn, heroCards }) {
       </div>
 
       {/* chip d'ante sous le siège — rend l'ante visible */}
-      <Chip amount={2} tone="#1e293b" label="ante 2" />
+      <Chip amount={ante} tone="#1e293b" label={`ante ${ante}`} />
     </div>
   );
 }
@@ -336,16 +350,30 @@ function TowardCenter({ pos, factor = 0.26, children }) {
 
 // ─────────────────────────── COMPOSANT PRINCIPAL ───────────────────────────
 
-export default function PokerTable({ spot = DEFAULT_SPOT }) {
-  const { stakes, players, board, heroCards, pot, toCall, heroStack, minRaise } = spot;
+export default function SpotTrainerTable(props) {
+  // Props loosely typed on purpose: this is a JS component consumed from TS with
+  // a typed `Spot`. Defaulting inside the body keeps the exported component type
+  // permissive (no DEFAULT_SPOT shape leaking into callers).
+  const spot = props.spot ?? DEFAULT_SPOT;
+  const onAttempt = props.onAttempt;
+  const { stakes, players, heroId, pot, toCall, minRaise, solution } = spot;
+
+  const seats = players.length;
+  const board = useMemo(() => spot.board.map(parseCard), [spot.board]);
+  const heroCards = useMemo(() => spot.heroCards.map(parseCard), [spot.heroCards]);
+
+  const heroPlayer =
+    players.find((p) => p.id === heroId) ?? players.find((p) => !p.folded) ?? players[0];
+  const heroStack = heroPlayer?.stack ?? 0;
+  const dealerPos = players.find((p) => p.dealer)?.pos ?? "BTN";
 
   const villainBet = useMemo(
-    () => Math.max(0, ...players.filter((p) => !p.hero).map((p) => p.bet || 0)),
-    [players]
+    () => Math.max(0, ...players.filter((p) => p.id !== heroId).map((p) => p.bet || 0)),
+    [players, heroId]
   );
 
-  // Compta du pot EXACTE : 6 antes + SB + BB = 15 préflop.
-  const preflopPot = stakes.seats * stakes.ante + stakes.sb + stakes.bb;
+  // Compta du pot EXACTE : antes (1 par siège) + SB + BB.
+  const preflopPot = seats * stakes.ante + stakes.sb + stakes.bb;
 
   // Cote du pot : toCall / (pot + toCall).
   const needPct = ((toCall / (pot + toCall)) * 100).toFixed(1);
@@ -363,11 +391,42 @@ export default function PokerTable({ spot = DEFAULT_SPOT }) {
 
   const [panel, setPanel] = useState("idle"); // idle | raise
   const [raiseTo, setRaiseTo] = useState(clamp(minRaise));
-  const [committed, setCommitted] = useState(null); // { kind, amount }
+  const [committed, setCommitted] = useState(null); // { kind, amount, score }
+  const [showProfile, setShowProfile] = useState(false);
 
   const heroTurn = committed === null;
 
-  const commit = (kind, amount) => setCommitted({ kind, amount });
+  // Mode du spot + profil adverse (exploit). La GTO reste la référence ; la
+  // vérité EV vient toujours de spot.solution (stocké), jamais d'un LLM.
+  const exploit = solution.mode === "exploit";
+  const profile = exploit && solution.vsProfile ? getProfile(solution.vsProfile) : undefined;
+
+  // Placeholder si la solution OU (en exploit) le profil n'est pas encore importé.
+  const solutionPlaceholder = !solution.source || solution.source.startsWith("PLACEHOLDER");
+  const profilePlaceholder = exploit && (!profile || isProfilePlaceholder(profile));
+  const placeholder = solutionPlaceholder || profilePlaceholder;
+  const placeholderReason = solutionPlaceholder
+    ? "Solution pas encore importée"
+    : "Profil adverse pas encore importé";
+
+  // Note l'action à partir de la VÉRITÉ STOCKÉE (spot.solution) — aucune GTO
+  // calculée ici, scoreAttempt ne fait que lire fréquences/EV. Remonte la
+  // tentative au parent (qui la persiste). Si la solution est un placeholder,
+  // on enregistre quand même mais sans verdict ni evLoss.
+  const commit = (kind, amount) => {
+    const sizing = kind === "raise" ? amount : undefined;
+    const score = placeholder ? null : scoreAttempt(solution, kind, sizing);
+    setCommitted({ kind, amount, score });
+    if (onAttempt) {
+      onAttempt({
+        spotId: spot.id,
+        action: kind,
+        sizing,
+        verdict: score ? score.verdict : null,
+        evLoss: score ? score.evLoss : null,
+      });
+    }
+  };
   const reset = () => {
     setCommitted(null);
     setPanel("idle");
@@ -397,11 +456,13 @@ export default function PokerTable({ spot = DEFAULT_SPOT }) {
         }
       `}</style>
 
-      {/* En-tête : structure de jeu */}
+      {/* En-tête : structure de jeu + axe du spot */}
       <div
         style={{
           display: "flex",
-          justifyContent: "center",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 6,
           marginBottom: "clamp(8px,2.5vw,14px)",
         }}
       >
@@ -416,8 +477,45 @@ export default function PokerTable({ spot = DEFAULT_SPOT }) {
             letterSpacing: 0.3,
           }}
         >
-          {`$${stakes.sb} / $${stakes.bb} · ante $${stakes.ante} · ${stakes.seats}-max`}
+          {`$${stakes.sb} / $${stakes.bb} · ante $${stakes.ante} · ${seats}-max`}
         </div>
+        <div style={{ fontSize: "clamp(11px,3vw,13px)", color: "#94a3b8" }}>{spot.axis}</div>
+
+        {/* Badge de mode : GTO (référence) ou EXPLOIT vs profil (best-response stockée) */}
+        <button
+          type="button"
+          onClick={() => exploit && setShowProfile((v) => !v)}
+          title={exploit ? profile?.description : "Solution d'équilibre (référence)"}
+          style={{
+            appearance: "none",
+            cursor: exploit ? "pointer" : "default",
+            padding: "3px 10px",
+            borderRadius: 999,
+            fontSize: "clamp(10px,2.6vw,12px)",
+            fontWeight: 800,
+            letterSpacing: 0.4,
+            color: exploit ? "#a78bfa" : "#22c55e",
+            background: exploit ? "rgba(167,139,250,0.14)" : "rgba(34,197,94,0.14)",
+            border: `1px solid ${exploit ? "#a78bfa" : "#22c55e"}`,
+          }}
+        >
+          {exploit ? `EXPLOIT vs ${profile?.name ?? solution.vsProfile ?? "?"}` : "GTO"}
+        </button>
+
+        {exploit && showProfile && profile && (
+          <p
+            style={{
+              margin: 0,
+              maxWidth: 420,
+              textAlign: "center",
+              fontSize: "clamp(10px,2.8vw,12px)",
+              color: "#cbd5e1",
+              lineHeight: 1.45,
+            }}
+          >
+            {profile.description}
+          </p>
+        )}
       </div>
 
       {/* ── TABLE ── */}
@@ -453,7 +551,7 @@ export default function PokerTable({ spot = DEFAULT_SPOT }) {
           />
         </div>
 
-        {/* board central : 3 cartes + 2 fantômes */}
+        {/* board central : cartes + fantômes jusqu'à 5 */}
         <div
           style={{
             position: "absolute",
@@ -504,17 +602,25 @@ export default function PokerTable({ spot = DEFAULT_SPOT }) {
               color: "#94a3b8",
             }}
           >
-            préflop {preflopPot} → flop {pot - villainBet} → +c-bet {villainBet}
+            antes+blinds {preflopPot}
+            {villainBet > 0 ? ` → mise face à toi ${villainBet}` : ""}
           </div>
         </div>
 
         {/* sièges */}
         {players.map((p) => (
-          <Seat key={p.id} player={p} isHeroTurn={heroTurn} heroCards={heroCards} />
+          <Seat
+            key={p.id}
+            player={p}
+            isHero={p.id === heroId}
+            isHeroTurn={heroTurn}
+            heroCards={heroCards}
+            ante={stakes.ante}
+          />
         ))}
 
-        {/* bouton dealer "D" à côté du BTN */}
-        <TowardCenter pos="BTN" factor={0.16}>
+        {/* bouton dealer "D" à côté du siège dealer */}
+        <TowardCenter pos={dealerPos} factor={0.16}>
           <div
             style={{
               width: "clamp(20px,5.6vw,26px)",
@@ -533,12 +639,14 @@ export default function PokerTable({ spot = DEFAULT_SPOT }) {
           </div>
         </TowardCenter>
 
-        {/* chip de mise du c-bet devant le BTN */}
-        {villainBet > 0 && (
-          <TowardCenter pos="BTN" factor={0.38}>
-            <Chip amount={villainBet} tone="#b45309" label={`mise ${villainBet}`} />
-          </TowardCenter>
-        )}
+        {/* chip de mise (c-bet) devant les vilains qui ont misé */}
+        {players
+          .filter((p) => p.id !== heroId && (p.bet || 0) > 0)
+          .map((p) => (
+            <TowardCenter key={p.id} pos={p.pos} factor={0.38}>
+              <Chip amount={p.bet} tone="#b45309" label={`mise ${p.bet}`} />
+            </TowardCenter>
+          ))}
       </div>
 
       {/* ── PANNEAU D'ACTION (bien séparé) ── */}
@@ -566,7 +674,7 @@ export default function PokerTable({ spot = DEFAULT_SPOT }) {
         </div>
 
         {committed ? (
-          // ── FEEDBACK NEUTRE : aucun verdict GTO inventé ──
+          // ── FEEDBACK : verdict + fréquences/EV TIRÉS de spot.solution ──
           <div style={{ textAlign: "center" }}>
             <div
               style={{
@@ -582,18 +690,36 @@ export default function PokerTable({ spot = DEFAULT_SPOT }) {
                 {committed.kind === "raise" && `Raise to ${committed.amount}`}
               </span>
             </div>
-            <p
-              style={{
-                margin: "0 auto 14px",
-                maxWidth: 380,
-                fontSize: "clamp(11px,3vw,13px)",
-                color: "#94a3b8",
-                lineHeight: 1.5,
-              }}
-            >
-              Action enregistrée. Le feedback (verdict, fréquences, EV) viendra de
-              la couche solver — ce trainer n'évalue pas le coup lui-même.
-            </p>
+
+            {placeholder ? (
+              // Pas de vérité solver importée → on NE note pas (tentative quand même enregistrée).
+              <p
+                style={{
+                  margin: "0 auto 12px",
+                  maxWidth: 420,
+                  fontSize: "clamp(11px,3vw,13px)",
+                  color: "#94a3b8",
+                  lineHeight: 1.5,
+                }}
+              >
+                {placeholderReason} — pas de notation. Tentative enregistrée.
+                <br />
+                <span style={{ color: "#64748b" }}>
+                  source : {(profilePlaceholder && !solutionPlaceholder
+                    ? profile?.source
+                    : solution.source) ?? "—"}
+                </span>
+              </p>
+            ) : (
+              <Feedback score={committed.score} solution={solution} profile={profile} />
+            )}
+
+            {/* TODO(LLM) : générer ICI l'EXPLICATION en langage naturel.
+                Input : { spot, solution, action élève (committed), evLoss/verdict
+                (committed.score) } → POST /api/explain → Claude.
+                L'LLM EXPLIQUE seulement ; il ne recalcule RIEN : fréquences, EV,
+                bestAction et le verdict viennent exclusivement de spot.solution. */}
+
             <button onClick={reset} style={btnStyle("#334155")}>
               <span style={{ fontWeight: 800 }}>Recommencer</span>
             </button>
@@ -692,6 +818,165 @@ export default function PokerTable({ spot = DEFAULT_SPOT }) {
         )}
       </div>
     </div>
+  );
+}
+
+const mutedNote = {
+  margin: "0 auto 8px",
+  maxWidth: 420,
+  fontSize: "clamp(10px,2.8vw,12px)",
+  color: "#94a3b8",
+  lineHeight: 1.45,
+};
+
+/**
+ * Décrit l'action recommandée d'un bloc { bestAction, actions } : libellé +
+ * sizing s'il s'agit d'une relance. Lit uniquement les données stockées.
+ */
+function describeBest(block) {
+  const candidates = block.actions.filter((a) => a.action === block.bestAction);
+  const best = candidates.slice().sort((a, b) => b.frequency - a.frequency)[0];
+  const size = best && best.sizing ? ` ${best.sizing}` : "";
+  return `${ACTION_LABEL[block.bestAction]}${size}`;
+}
+
+/**
+ * Bandeau verdict + tableau solution. TOUT est tiré de `score` (issu de
+ * scoreAttempt) et de `solution.actions` (vérité solver stockée) — rien n'est
+ * recalculé ici. En mode exploit avec baselineGto, on affiche la comparaison
+ * GTO → exploit (moment pédagogique), elle aussi tirée des données stockées.
+ */
+function Feedback({ score, solution, profile }) {
+  if (!score) return null;
+  const meta = VERDICT_META[score.verdict];
+  const showEvLoss = score.evLoss != null && score.evLoss > 0;
+
+  return (
+    <>
+      {/* Bandeau verdict coloré */}
+      <div
+        style={{
+          margin: "0 auto 8px",
+          maxWidth: 420,
+          padding: "8px 14px",
+          borderRadius: 10,
+          background: `${meta.color}22`,
+          border: `1px solid ${meta.color}`,
+          color: meta.color,
+          fontWeight: 800,
+          fontSize: "clamp(13px,3.6vw,15px)",
+        }}
+      >
+        {meta.label}
+        {showEvLoss && (
+          <span style={{ fontWeight: 600 }}> · EV perdue {score.evLoss.toFixed(2)}</span>
+        )}
+      </div>
+
+      {score.verdict === "out-of-tree" && (
+        <p style={mutedNote}>Cette action n'existe pas dans l'arbre solver — non notée.</p>
+      )}
+      {score.sizingNote && <p style={mutedNote}>{score.sizingNote}</p>}
+
+      {/* Tableau : action | sizing | fréquence (barre) | EV. Ligne choisie surlignée. */}
+      <div style={{ maxWidth: 360, margin: "10px auto 12px", fontSize: "clamp(11px,3vw,13px)" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "auto 1fr auto",
+            gap: "2px 10px",
+            color: "#64748b",
+            marginBottom: 4,
+            padding: "0 6px",
+            textAlign: "left",
+          }}
+        >
+          <span>Action</span>
+          <span>Fréquence</span>
+          <span style={{ textAlign: "right" }}>EV</span>
+        </div>
+        {solution.actions.map((a) => {
+          const chosen = !!score.matched && a === score.matched;
+          const pct = Math.round(a.frequency * 100);
+          return (
+            <div
+              key={`${a.action}-${a.sizing ?? 0}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "auto 1fr auto",
+                gap: "2px 10px",
+                alignItems: "center",
+                padding: "5px 6px",
+                borderRadius: 8,
+                background: chosen ? "rgba(251,191,36,0.14)" : "transparent",
+                border: chosen ? "1px solid rgba(251,191,36,0.5)" : "1px solid transparent",
+              }}
+            >
+              <span
+                style={{
+                  textAlign: "left",
+                  whiteSpace: "nowrap",
+                  color: chosen ? "#fbbf24" : "#e5e7eb",
+                  fontWeight: chosen ? 800 : 600,
+                }}
+              >
+                {ACTION_LABEL[a.action]}
+                {a.sizing ? ` ${a.sizing}` : ""}
+              </span>
+              {/* barre de fréquence */}
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span
+                  style={{
+                    flex: 1,
+                    height: 8,
+                    borderRadius: 999,
+                    background: "rgba(255,255,255,0.08)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "block",
+                      height: "100%",
+                      width: `${pct}%`,
+                      background: chosen ? "#fbbf24" : "#38bdf8",
+                      transition: "width .25s ease",
+                    }}
+                  />
+                </span>
+                <span style={{ minWidth: 34, textAlign: "right", color: "#cbd5e1" }}>{pct}%</span>
+              </span>
+              <span style={{ minWidth: 30, textAlign: "right", color: "#cbd5e1" }}>{a.ev}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Comparaison GTO → exploit (mode exploit + baseline stockée). Les deux
+          recommandations viennent des données solver, rien n'est inventé. */}
+      {solution.mode === "exploit" && solution.baselineGto && (
+        <div
+          style={{
+            maxWidth: 360,
+            margin: "0 auto 12px",
+            padding: "8px 12px",
+            borderRadius: 10,
+            background: "rgba(167,139,250,0.10)",
+            border: "1px solid rgba(167,139,250,0.4)",
+            fontSize: "clamp(11px,3vw,13px)",
+            color: "#cbd5e1",
+            lineHeight: 1.5,
+          }}
+        >
+          GTO : <strong style={{ color: "#22c55e" }}>{describeBest(solution.baselineGto)}</strong>
+          {"  →  "}
+          vs {profile?.name ?? "ce profil"}, exploit :{" "}
+          <strong style={{ color: "#a78bfa" }}>
+            {describeBest({ bestAction: solution.bestAction, actions: solution.actions })}
+          </strong>
+        </div>
+      )}
+    </>
   );
 }
 
