@@ -10,7 +10,7 @@
 import { applyAction, createHand, getLegalActions, type HandConfig } from "../engine/engine.js";
 import { pot, type AtLeastTwo, type GameState, type Seat, type Street } from "../engine/state.js";
 import type { ActionInput } from "../engine/actions.js";
-import type { Bot, DecisionView, OpponentView, Position } from "../bots/types.js";
+import type { Bot, DecisionSource, DecisionView, OpponentView, Position } from "../bots/types.js";
 
 export interface DecisionRecord {
   index: number;
@@ -22,6 +22,8 @@ export interface DecisionRecord {
   reasoning?: string;
   confidence?: number;
   perceivedEquity?: number;
+  /** Provenance of the decision (preflop table "approx"/"solver", or "heuristic"). */
+  source?: DecisionSource;
 }
 
 export interface HandLog {
@@ -117,6 +119,7 @@ export async function playHand(
       reasoning: decision.reasoning,
       confidence: decision.confidence,
       perceivedEquity: decision.perceivedEquity,
+      source: decision.source,
     };
     decisions.push(record);
 

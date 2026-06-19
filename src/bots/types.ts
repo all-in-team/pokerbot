@@ -58,6 +58,9 @@ export interface DecisionView {
   activePlayers?: number;
 }
 
+/** Where a decision came from. Preflop table ("approx"/"solver") or the fallback. */
+export type DecisionSource = "approx" | "solver" | "heuristic";
+
 export interface Decision {
   action: ActionInput;
   /** 0..1 self-rated confidence (optional; reasoning agents always set it). */
@@ -66,6 +69,11 @@ export interface Decision {
   reasoning?: string;
   /** The bot's own estimate of its equity, 0..1 (compared to true equity). */
   perceivedEquity?: number;
+  /**
+   * Provenance of the decision, for the log/UI: a preflop range table
+   * ("approx"/"solver") or the "heuristic" fallback. Undefined ⇒ unspecified.
+   */
+  source?: DecisionSource;
 }
 
 export interface Bot {

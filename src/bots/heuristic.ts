@@ -12,6 +12,8 @@
 import { evaluate } from "../engine/evaluator.js";
 import { rankValue, type Card } from "../engine/cards.js";
 import { createRng, type Rng } from "../engine/rng.js";
+import type { ActionInput } from "../engine/actions.js";
+import { lookupPreflop, sampleAction, type PreflopLookupResult } from "../lib/preflop/preflopLookup.js";
 import { clampToLegal, sizeToFromPotFraction } from "./util.js";
 import type { Bot, Decision, DecisionView, TablePosition } from "./types.js";
 
@@ -106,7 +108,40 @@ function strengthFor(view: DecisionView): number {
 export function createHeuristicBot(config: HeuristicConfig): Bot {
   const rng: Rng = createRng(config.seed);
 
+  // Preflop, table-driven: sample the action from the range table's distribution
+  // for this spot (frequencies + size come from the table, nothing invented).
+  function decideFromRange(lk: PreflopLookupResult, view: DecisionView): Decision {
+    const { dist, source, scenario, combo } = lk;
+    const picked = sampleAction(dist, rng.next());
+    const freq = picked === "fold" ? dist.fold : picked === "call" ? dist.call : dist.raise;
+    const raiseTo = dist.raiseTo ?? 2.5;
+
+    let intent: ActionInput;
+    if (picked === "raise") intent = { type: view.legal.aggressiveType, to: Math.round(raiseTo * view.bigBlind) };
+    else if (picked === "call") intent = { type: "call" };
+    else intent = { type: "fold" };
+
+    return {
+      action: clampToLegal(intent, view.legal),
+      confidence: freq, // straight from the table — not invented
+      source,
+      reasoning: `Range ${scenario} · ${combo}: ${picked}${picked === "raise" ? ` to ${raiseTo}bb` : ""} (${(freq * 100) | 0}%, ${source})`,
+      // perceivedEquity intentionally omitted: the table carries no equity/EV.
+    };
+  }
+
   function decide(view: DecisionView): Decision {
+    // Preflop is range-table-driven when a seeded scenario covers the spot;
+    // otherwise (and always postflop) we fall back to the labelled heuristic.
+    if (view.street === "preflop") {
+      const lk = lookupPreflop(view);
+      if (lk) return decideFromRange(lk, view);
+    }
+    return heuristicDecide(view);
+  }
+
+  // Postflop + uncovered-preflop fallback: the existing approx heuristic.
+  function heuristicDecide(view: DecisionView): Decision {
     const { legal } = view;
     const strength = strengthFor(view);
     const aggr = config.aggression;
@@ -179,6 +214,7 @@ export function createHeuristicBot(config: HeuristicConfig): Bot {
       confidence: Math.round(Math.abs(strength - 0.5) * 200) / 100,
       perceivedEquity: strength,
       reasoning,
+      source: "heuristic",
     };
   }
 

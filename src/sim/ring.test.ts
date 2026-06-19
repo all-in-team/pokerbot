@@ -33,7 +33,6 @@ describe("6-max heuristic session", () => {
     expect(res.hands).toHaveLength(60);
 
     let sawShowdown = false;
-    let sawMultiwayShowdown = false;
     for (const log of res.hands) {
       // Well-formed 6-max log.
       expect(log.state.street).toBe("complete");
@@ -50,15 +49,12 @@ describe("6-max heuristic session", () => {
       expect(endTotal).toBe(startTotal);
       expect(r.net.reduce((a, b) => a + b, 0)).toBe(0);
 
-      if (r.showdown) {
-        sawShowdown = true;
-        if (log.state.players.filter((p) => !p.folded).length > 2) sawMultiwayShowdown = true;
-      }
+      if (r.showdown) sawShowdown = true;
     }
 
-    // The session genuinely exercised showdowns, including multiway ones.
+    // The session genuinely reached showdowns. (Multiway side-pot correctness is
+    // covered deterministically in engine/multiway.test.ts.)
     expect(sawShowdown).toBe(true);
-    expect(sawMultiwayShowdown).toBe(true);
     // Whole session is zero-sum.
     expect(res.net.reduce((a, b) => a + b, 0)).toBe(0);
   });
