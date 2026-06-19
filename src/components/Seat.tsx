@@ -39,7 +39,7 @@ export function Seat({
         {player.isButton && (
           <div
             className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full text-[0.6rem] font-bold"
-            style={{ background: "linear-gradient(180deg,#f0d699,#b88a32)", color: "#2a1f0c", boxShadow: "0 1px 4px rgba(0,0,0,0.5)" }}
+            style={{ background: "#F4F1E8", color: "#0E1117", boxShadow: "0 2px 6px rgba(0,0,0,0.55)" }}
           >
             BTN
           </div>

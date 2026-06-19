@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { LineChart, type Series } from "@/components/LineChart.js";
+import { TopNav } from "@/components/TopNav.js";
 import { solveKuhn, type SolveResult } from "@/solver/cfr.js";
 
 const ITER_OPTIONS = [2000, 5000, 20000, 50000];
@@ -28,18 +29,20 @@ export default function SolverPage() {
   }, []);
 
   const exploitSeries: Series[] = result
-    ? [{ label: "exploitability", color: "#d8694c", points: result.history.map((h) => h.exploitability) }]
+    ? [{ label: "exploitability", color: "#E2533B", points: result.history.map((h) => h.exploitability) }]
     : [];
   const entropySeries: Series[] = result
-    ? [{ label: "strategy entropy (bits)", color: "#5fd1c4", points: result.history.map((h) => h.entropy) }]
+    ? [{ label: "strategy entropy (bits)", color: "#2DD4A7", points: result.history.map((h) => h.entropy) }]
     : [];
 
   return (
+    <>
+    <TopNav />
     <main className="mx-auto min-h-screen max-w-[1100px] px-5 py-6">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow mb-1">counterfactual regret minimization · converging to Nash</div>
-          <h1 className="brass text-4xl font-semibold leading-none" style={{ fontFamily: "var(--font-display)" }}>
+          <h1 className="brass text-3xl font-semibold leading-none">
             CFR Solver
           </h1>
         </div>
@@ -53,7 +56,7 @@ export default function SolverPage() {
             }}
             disabled={running}
             className="data rounded px-3 py-2 text-sm outline-none"
-            style={{ border: "1px solid var(--color-line)", background: "#0a1611", color: "var(--color-cream)" }}
+            style={{ border: "1px solid var(--color-line)", background: "var(--color-ink-2)", color: "var(--color-cream)" }}
           >
             {ITER_OPTIONS.map((n) => (
               <option key={n} value={n}>
@@ -131,6 +134,7 @@ export default function SolverPage() {
         </div>
       )}
     </main>
+    </>
   );
 }
 

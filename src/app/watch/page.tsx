@@ -11,16 +11,8 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import HandReplayer from "@/components/HandReplayer.js";
 import { replayMultiway, type Frame } from "@/lib/client/replayMultiway.js";
 import { createWatchTable, initialWatchState, playNextHand } from "@/lib/client/watchSim.js";
-
-const C = {
-  appBg: "#0E1117",
-  surface: "#171B23",
-  border: "rgba(255,255,255,0.07)",
-  text: "#E6E8EC",
-  text2: "#9BA1AD",
-  text3: "#6B7280",
-  teal: "#2DD4A7",
-};
+import { TopNav } from "@/components/TopNav.js";
+import { THEME as C } from "@/lib/theme.js";
 
 export default function WatchPage() {
   const tableRef = useRef(createWatchTable({ seats: 6, seed: "watch" }));
@@ -45,20 +37,10 @@ export default function WatchPage() {
   }, [next]);
 
   return (
-    <main
-      style={{
-        minHeight: "100dvh",
-        background: C.appBg,
-        color: C.text,
-        fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-      }}
-    >
-      <div style={{ maxWidth: 980, margin: "0 auto", padding: "clamp(16px,4vw,32px)" }}>
-        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
-          <h1 style={{ fontSize: "clamp(19px,4vw,26px)", fontWeight: 800, margin: 0, letterSpacing: -0.3 }}>
-            <span style={{ color: C.teal }}>♠</span> Watch · bots {table.seats}-max
-          </h1>
-          <div
+    <main style={{ minHeight: "100dvh", background: C.appBg, color: C.text }}>
+      <TopNav
+        right={
+          <span
             style={{
               fontSize: 12.5,
               color: C.text2,
@@ -70,7 +52,14 @@ export default function WatchPage() {
             }}
           >
             {`$${table.smallBlind}/$${table.bigBlind} · ante $${table.ante} · main #${handNo}`}
-          </div>
+          </span>
+        }
+      />
+      <div style={{ maxWidth: 980, margin: "0 auto", padding: "clamp(16px,4vw,32px)" }}>
+        <header style={{ marginBottom: 8 }}>
+          <h1 style={{ fontSize: "clamp(18px,4vw,24px)", fontWeight: 800, margin: 0, letterSpacing: -0.3 }}>
+            <span style={{ color: C.teal }}>♠</span> Watch · bots {table.seats}-max
+          </h1>
         </header>
 
         <p style={{ fontSize: 13.5, color: C.text2, marginTop: 0, marginBottom: 22, lineHeight: 1.5, maxWidth: 680 }}>

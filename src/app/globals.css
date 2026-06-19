@@ -1,33 +1,53 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Midnight Felt × Quant Terminal
-   Deep emerald casino felt + brass furniture, with a cool teal/amber
-   analytics register layered on top (the "truth layer" reads as data, not felt).
+   Unified design system — single source of truth = the /watch reskin.
+   Dark, modern, premium "study tool" look: slate surfaces on near-black,
+   teal primary accent, gold for chips/values, clean system sans. Legacy token
+   NAMES are kept and repointed at the new palette so every existing component
+   adopts the look without per-file edits.
    ───────────────────────────────────────────────────────────────────────── */
 @theme {
-  --font-display: var(--font-bodoni), Georgia, serif;
-  --font-body: var(--font-hanken), system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --font-display: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
 
-  --color-ink: #060d0a;
-  --color-ink-2: #0a1611;
-  --color-felt: #0f4636;
-  --color-felt-deep: #062017;
-  --color-felt-edge: #04140f;
-  --color-rail: #15100a;
-  --color-brass: #c8a24a;
-  --color-brass-bright: #f0d699;
-  --color-bone: #f4eddd;
-  --color-crimson: #c4313a;
-  --color-jet: #1a160f;
-  --color-teal: #5fd1c4;
-  --color-amber: #e8a64e;
-  --color-jade: #5ccb8c;
-  --color-rust: #d8694c;
-  --color-cream: #ece5d6;
-  --color-muted: #8d8576;
-  --color-line: rgba(200, 162, 74, 0.16);
+  /* Backgrounds & surfaces */
+  --color-ink: #0e1117; /* app background */
+  --color-ink-2: #11151c;
+  --color-surface: #171b23; /* panels */
+  --color-rail: #0e1117;
+
+  /* Felt (refined, not casino-green) */
+  --color-felt: #1e4a3c;
+  --color-felt-deep: #163a2f;
+  --color-felt-edge: #2a5446;
+
+  /* Accents */
+  --color-brass: #e0a93b; /* gold — chips / values */
+  --color-brass-bright: #2dd4a7; /* teal — primary accent / interactive */
+  --color-teal: #2dd4a7;
+  --color-amber: #e0913b; /* bet/raise · warnings */
+  --color-jade: #21b07a; /* call/check · positive */
+  --color-rust: #e2533b; /* fold · negative · exit */
+  --color-crimson: #e23b3b; /* hearts */
+
+  /* Text */
+  --color-bone: #e6e8ec;
+  --color-cream: #e6e8ec; /* primary text */
+  --color-muted: #9ba1ad; /* secondary text */
+  --color-faint: #6b7280; /* tertiary text */
+  --color-jet: #1a1a1a; /* spades */
+
+  /* Lines */
+  --color-line: rgba(255, 255, 255, 0.08);
+
+  /* 4-colour deck (shared with theme.ts) */
+  --card-face: #ffffff;
+  --card-spade: #1a1a1a;
+  --card-heart: #e23b3b;
+  --card-diamond: #2f86e0;
+  --card-club: #21b07a;
 }
 
 :root {
@@ -48,79 +68,70 @@ body {
   overflow-x: hidden;
 }
 
-/* Atmospheric backdrop: a deep radial wash + faint brass aurora at the top. */
+/* Quiet dark backdrop with a faint teal glow at the top. */
 .app-bg {
   position: fixed;
   inset: 0;
   z-index: -2;
   background:
-    radial-gradient(120% 80% at 50% -10%, rgba(200, 162, 74, 0.08), transparent 55%),
-    radial-gradient(90% 60% at 50% 120%, rgba(15, 70, 54, 0.35), transparent 60%),
-    linear-gradient(180deg, #050a08 0%, #060d0a 40%, #04100b 100%);
+    radial-gradient(110% 70% at 50% -10%, rgba(45, 212, 167, 0.06), transparent 55%),
+    linear-gradient(180deg, #0e1117 0%, #0b0e13 100%);
 }
 
-/* Film grain overlay for tactile depth. */
+/* Very subtle grain for depth (kept faint). */
 .grain {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: 0.05;
+  opacity: 0.025;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* Brass-leaf text treatment for display numerals and the wordmark. */
+/* Wordmark / accent text — solid teal (was a brass gradient). */
 .brass {
-  background: linear-gradient(180deg, #f6e2af 0%, #d9b463 38%, #b88a32 62%, #f0d699 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  background: none;
+  -webkit-text-fill-color: var(--color-teal);
+  color: var(--color-teal);
 }
 
 .hairline {
   border-color: var(--color-line);
 }
 
-/* Glass-ish analytics panel. */
+/* Surface panel. */
 .panel {
-  background: linear-gradient(180deg, rgba(12, 24, 19, 0.82), rgba(6, 16, 12, 0.92));
+  background: var(--color-surface);
   border: 1px solid var(--color-line);
-  backdrop-filter: blur(6px);
+  border-radius: 14px;
+  backdrop-filter: none;
 }
 
 .data {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
 }
 
 .eyebrow {
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   text-transform: uppercase;
-  letter-spacing: 0.28em;
-  font-size: 0.62rem;
-  color: var(--color-muted);
+  letter-spacing: 0.12em;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--color-faint);
 }
 
-/* Felt surface used by the table. */
+/* Refined felt used by the table. */
 .felt {
-  background:
-    radial-gradient(75% 75% at 50% 42%, #14543f 0%, #0d4031 42%, #08291f 78%, #051a14 100%);
-  box-shadow:
-    inset 0 2px 30px rgba(0, 0, 0, 0.55),
-    inset 0 0 120px rgba(0, 0, 0, 0.45);
-}
-
-/* Subtle moving sheen across the felt. */
-@keyframes sheen {
-  0% { transform: translateX(-30%) rotate(8deg); opacity: 0; }
-  50% { opacity: 0.35; }
-  100% { transform: translateX(130%) rotate(8deg); opacity: 0; }
+  background: radial-gradient(120% 120% at 50% 36%, #1e4a3c 0%, #163a2f 100%);
+  border: 1px solid var(--color-felt-edge);
+  box-shadow: inset 0 6px 26px rgba(0, 0, 0, 0.4);
 }
 
 @keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(200, 162, 74, 0.45); }
-  100% { box-shadow: 0 0 0 14px rgba(200, 162, 74, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(45, 212, 167, 0.4); }
+  100% { box-shadow: 0 0 0 12px rgba(45, 212, 167, 0); }
 }
 
 .to-act-ring {
@@ -130,22 +141,23 @@ body {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgba(200, 162, 74, 0.18);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(200, 162, 74, 0.32); background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); background-clip: padding-box; }
 
-::selection { background: rgba(200, 162, 74, 0.3); color: #fff; }
+::selection { background: rgba(45, 212, 167, 0.28); color: #fff; }
 
+.arena-range { accent-color: var(--color-teal); }
 .arena-range::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 16px;
   height: 16px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #f6e2af, #b88a32);
+  background: var(--color-teal);
   border: 1px solid rgba(0, 0, 0, 0.4);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
   cursor: pointer;
@@ -154,7 +166,7 @@ body {
   width: 16px;
   height: 16px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #f6e2af, #b88a32);
+  background: var(--color-teal);
   border: 1px solid rgba(0, 0, 0, 0.4);
   cursor: pointer;
 }

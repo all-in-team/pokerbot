@@ -10,27 +10,11 @@
 
 import React, { useEffect, useState } from "react";
 import PokerTableView from "@/components/PokerTableView.js";
+import { THEME as C } from "@/lib/theme.js";
 import { FRAME_MS, type Frame } from "@/lib/client/replayMultiway.js";
-import type { ActionType } from "@/engine/state.js";
 
-const C = {
-  appBg: "#0E1117",
-  surface: "#171B23",
-  border: "rgba(255,255,255,0.08)",
-  text: "#E6E8EC",
-  text2: "#9BA1AD",
-  text3: "#6B7280",
-  teal: "#2DD4A7",
-};
-
-// Action-tag colours for the log.
-const ACTION_COLOR: Partial<Record<ActionType, string>> = {
-  fold: "#6B93D6",
-  check: "#21B07A",
-  call: "#21B07A",
-  bet: "#E0913B",
-  raise: "#E0913B",
-};
+// Action-tag colours for the log (from the shared theme).
+const ACTION_COLOR = C.action as Record<string, string | undefined>;
 
 function IconButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
   return (

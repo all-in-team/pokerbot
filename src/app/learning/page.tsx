@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { LineChart, type Series } from "@/components/LineChart.js";
+import { TopNav } from "@/components/TopNav.js";
 import type { Playbook, PlaybookDiff } from "@/learning/playbook.js";
 import type { HudStats } from "@/sim/hud.js";
 
@@ -39,7 +40,7 @@ interface LearningData {
   playbooks: [PlaybookVersion[], PlaybookVersion[]];
 }
 
-const SEAT_COLORS = ["#5fd1c4", "#e8a64e"];
+const SEAT_COLORS = ["#2DD4A7", "#E0A93B"];
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 export default function LearningPage() {
@@ -71,11 +72,13 @@ export default function LearningPage() {
   }, [selected]);
 
   return (
+    <>
+    <TopNav />
     <main className="mx-auto min-h-screen max-w-[1200px] px-5 py-6">
       <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="eyebrow mb-1">how their strategy evolves</div>
-          <h1 className="brass text-4xl font-semibold leading-none" style={{ fontFamily: "var(--font-display)" }}>
+          <h1 className="brass text-3xl font-semibold leading-none">
             Learning Timeline
           </h1>
         </div>
@@ -85,7 +88,7 @@ export default function LearningPage() {
               value={selected ?? ""}
               onChange={(e) => setSelected(Number(e.target.value))}
               className="data rounded px-3 py-2 text-sm outline-none"
-              style={{ border: "1px solid var(--color-line)", background: "#0a1611", color: "var(--color-cream)" }}
+              style={{ border: "1px solid var(--color-line)", background: "var(--color-ink-2)", color: "var(--color-cream)" }}
             >
               {matches.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -119,6 +122,7 @@ export default function LearningPage() {
       )}
       {!loading && data && data.match.sessions > 0 && <Timeline data={data} />}
     </main>
+    </>
   );
 }
 
@@ -190,9 +194,9 @@ function BotEvolution({
 }) {
   const color = SEAT_COLORS[seat]!;
   const freqSeries: Series[] = [
-    { label: "c-bet", color: "#5fd1c4", points: versions.map((v) => v.playbook.postflop.cbet * 100) },
-    { label: "2-barrel", color: "#e8a64e", points: versions.map((v) => v.playbook.postflop.doubleBarrel * 100) },
-    { label: "bluff-raise", color: "#d8694c", points: versions.map((v) => v.playbook.postflop.bluffRaise * 100) },
+    { label: "c-bet", color: "#2DD4A7", points: versions.map((v) => v.playbook.postflop.cbet * 100) },
+    { label: "2-barrel", color: "#E0A93B", points: versions.map((v) => v.playbook.postflop.doubleBarrel * 100) },
+    { label: "bluff-raise", color: "#E2533B", points: versions.map((v) => v.playbook.postflop.bluffRaise * 100) },
   ];
 
   return (

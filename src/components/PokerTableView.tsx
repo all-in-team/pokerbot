@@ -8,33 +8,13 @@
  */
 
 import React from "react";
+import { THEME as C } from "@/lib/theme.js";
 import type { Position } from "@/engine/state.js";
 import type { Frame, SeatFrame } from "@/lib/client/replayMultiway.js";
 
-// ── Palette ──
-const C = {
-  surface: "#171B23",
-  border: "rgba(255,255,255,0.08)",
-  text: "#E6E8EC",
-  text2: "#9BA1AD",
-  text3: "#6B7280",
-  teal: "#2DD4A7",
-  gold: "#E0A93B",
-};
-
-// 4-colour deck.
-const SUITS: Record<string, { glyph: string; color: string; label: string }> = {
-  s: { glyph: "♠", color: "#1A1A1A", label: "pique" },
-  h: { glyph: "♥", color: "#E23B3B", label: "cœur" },
-  d: { glyph: "♦", color: "#2F86E0", label: "carreau" },
-  c: { glyph: "♣", color: "#21B07A", label: "trèfle" },
-};
-
-// Discreet position chips: BTN gold, SB teal, BB blue, others neutral.
-const POS_COLOR: Record<string, string> = {
-  BTN: "#E0A93B", SB: "#2DD4A7", BB: "#2F86E0", UTG: "#6B7280", HJ: "#6B7280", CO: "#6B7280",
-};
-const posColor = (p: string) => POS_COLOR[p] ?? "#6B7280";
+// 4-colour deck + position chips come from the shared theme.
+const SUITS = C.suits;
+const posColor = (p: string) => C.pos[p] ?? "#6B7280";
 
 // Seat placement around the oval (% of container), clockwise.
 const SEAT_XY: Record<Position, { x: number; y: number }> = {

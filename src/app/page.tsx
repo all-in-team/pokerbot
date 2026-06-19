@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { TopNav } from "@/components/TopNav.js";
 import { useArena, type ArenaMode } from "@/lib/client/useArena.js";
 import { DEFAULT_SETUP, type MatchSetup } from "@/lib/client/bots.js";
 import type { PersonalityName } from "@/bots/heuristic.js";
@@ -65,41 +65,29 @@ export default function ArenaPage() {
   const historyCount = arena.getHistory().length;
 
   return (
+    <>
+    <TopNav />
     <main className="mx-auto min-h-screen max-w-[1400px] px-5 py-6">
-      {/* Header */}
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      {/* Toolbar */}
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="eyebrow mb-1">Heads-Up · No-Limit Hold&apos;em</div>
-          <h1 className="brass text-4xl font-semibold leading-none tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
+          <h1 className="text-2xl font-semibold tracking-tight" style={{ color: "var(--color-cream)" }}>
             AI Poker Arena
           </h1>
         </div>
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-4">
           <Scoreboard arena={arena} />
           <Controls arena={arena} />
           <button
             onClick={replay ? () => setReplay(null) : openReplay}
             disabled={!replay && historyCount === 0}
             className="rounded-lg px-4 py-2 text-sm transition-all hover:brightness-125 disabled:opacity-40"
-            style={{ border: "1px solid var(--color-line)", color: replay ? "var(--color-rust)" : "var(--color-brass-bright)" }}
+            style={{ border: "1px solid var(--color-line)", color: replay ? "var(--color-rust)" : "var(--color-teal)" }}
             title={historyCount === 0 ? "Play a hand first" : "Scrub through past hands"}
           >
             {replay ? "Exit Replay" : `Replay ⏮ ${historyCount}`}
           </button>
-          <Link
-            href="/learning"
-            className="rounded-lg px-4 py-2 text-sm transition-all hover:brightness-125"
-            style={{ border: "1px solid var(--color-line)", color: "var(--color-brass-bright)" }}
-          >
-            Learning ↗
-          </Link>
-          <Link
-            href="/solver"
-            className="rounded-lg px-4 py-2 text-sm transition-all hover:brightness-125"
-            style={{ border: "1px solid var(--color-line)", color: "var(--color-brass-bright)" }}
-          >
-            Solver ↗
-          </Link>
         </div>
       </header>
 
@@ -174,6 +162,7 @@ export default function ArenaPage() {
         </span>
       </footer>
     </main>
+    </>
   );
 }
 
@@ -283,7 +272,7 @@ function SetupBar({
             value={draft.seats[i as 0 | 1].personality}
             onChange={(e) => setSeat(i as 0 | 1, { personality: e.target.value as PersonalityName })}
             className="data rounded px-2 py-1 text-sm outline-none"
-            style={{ border: "1px solid var(--color-line)", background: "#0a1611", color: "var(--color-cream)" }}
+            style={{ border: "1px solid var(--color-line)", background: "var(--color-ink-2)", color: "var(--color-cream)" }}
           >
             {PERSONALITIES.map((p) => (
               <option key={p} value={p}>

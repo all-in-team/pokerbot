@@ -1,14 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { THEME } from "@/lib/theme.js";
 import type { Card as CardType } from "@/engine/cards.js";
-
-const SUIT: Record<string, { glyph: string; red: boolean }> = {
-  s: { glyph: "♠", red: false },
-  h: { glyph: "♥", red: true },
-  d: { glyph: "♦", red: true },
-  c: { glyph: "♣", red: false },
-};
 
 const SIZES = {
   sm: { w: 44, h: 62, rank: 15, pip: 26 },
@@ -33,8 +27,8 @@ export function PlayingCard({
 }) {
   const s = SIZES[size];
   const rank = card ? card[0] : "";
-  const suit = card ? SUIT[card[1]!] : undefined;
-  const color = suit?.red ? "var(--color-crimson)" : "var(--color-jet)";
+  const suit = card ? THEME.suits[card[1]!] : undefined;
+  const color = suit?.color ?? "#1A1A1A";
   const display = rank === "T" ? "10" : rank;
 
   return (
@@ -48,46 +42,33 @@ export function PlayingCard({
     >
       {faceDown ? (
         <div
-          className="h-full w-full rounded-[7px] border"
+          className="h-full w-full rounded-[9px] border"
           style={{
-            borderColor: "rgba(200,162,74,0.4)",
-            background:
-              "repeating-linear-gradient(45deg, #143a52 0, #143a52 4px, #0f2c40 4px, #0f2c40 8px)",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.45), inset 0 0 0 3px rgba(200,162,74,0.12)",
+            borderColor: "rgba(255,255,255,0.10)",
+            background: "linear-gradient(135deg, #243044 0%, #1b2433 100%)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.45)",
           }}
         >
           <div
-            className="m-[5px] h-[calc(100%-10px)] w-[calc(100%-10px)] rounded-[4px]"
-            style={{ border: "1px solid rgba(240,214,153,0.35)" }}
+            className="m-[5px] h-[calc(100%-10px)] w-[calc(100%-10px)] rounded-[5px]"
+            style={{ background: "repeating-linear-gradient(45deg, rgba(45,212,167,0.12) 0 7px, transparent 7px 14px)" }}
           />
         </div>
       ) : (
         <div
-          className="relative h-full w-full overflow-hidden rounded-[7px]"
+          className="relative h-full w-full overflow-hidden rounded-[9px]"
           style={{
-            background: "linear-gradient(160deg, #fdf8ee 0%, #f1e8d6 100%)",
-            boxShadow:
-              "0 5px 14px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.8), inset 0 0 0 1px rgba(0,0,0,0.08)",
+            background: "#FFFFFF",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.06)",
+            color,
+            fontWeight: 800,
           }}
         >
-          {/* gloss */}
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{ background: "linear-gradient(135deg, rgba(255,255,255,0.45), transparent 40%)" }}
-          />
-          <div
-            className="absolute left-[5px] top-[3px] flex flex-col items-center leading-none"
-            style={{ color }}
-          >
-            <span style={{ fontSize: s.rank, fontWeight: 700, fontFamily: "var(--font-display)" }}>
-              {display}
-            </span>
-            <span style={{ fontSize: s.rank - 4, marginTop: -1 }}>{suit?.glyph}</span>
+          <div className="absolute left-[6px] top-[4px] flex flex-col items-center leading-none">
+            <span style={{ fontSize: s.rank, fontWeight: 800 }}>{display}</span>
+            <span style={{ fontSize: s.rank - 5, marginTop: -1 }}>{suit?.glyph}</span>
           </div>
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            style={{ color, fontSize: s.pip, opacity: 0.92 }}
-          >
+          <div className="absolute inset-0 flex items-center justify-center" style={{ fontSize: s.pip, opacity: 0.94 }}>
             {suit?.glyph}
           </div>
         </div>

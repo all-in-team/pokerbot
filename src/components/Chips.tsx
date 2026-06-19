@@ -27,7 +27,7 @@ const TIERS: { min: number; color: string }[] = [
   { min: 50, color: "#b8473f" },
   { min: 20, color: "#2f6f4f" },
   { min: 5, color: "#3a5a86" },
-  { min: 0, color: "#c8a24a" },
+  { min: 0, color: "#E0A93B" },
 ];
 
 function chipColor(amount: number): string {
