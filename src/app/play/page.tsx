@@ -190,7 +190,10 @@ export default function PlayPage() {
         }
       />
 
-      <div style={{ maxWidth: 1040, margin: "0 auto", padding: "clamp(16px,4vw,28px)", display: "grid", gap: 18, gridTemplateColumns: "minmax(0,1fr) 260px", alignItems: "start" }}>
+      <div style={{ maxWidth: 1040, margin: "0 auto", padding: "clamp(16px,4vw,28px)" }}>
+        <Scoreboard handsPlayed={stats.handsPlayed} heroNet={stats.netChips} heroBb100={bb100} />
+
+        <div style={{ display: "grid", gap: 18, gridTemplateColumns: "minmax(0,1fr) 260px", alignItems: "start", marginTop: 16 }}>
         <div>
           <PokerTableView state={frame} heroSeat={HERO} revealAll={complete && autoReveal} />
 
@@ -260,20 +263,24 @@ export default function PlayPage() {
           </div>
         </div>
 
-        {/* Right column: session stats + bot read */}
+        {/* Right column: session + the bots' attack plan (adversarial, no advice) */}
         <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14 }}>
-            <Eyebrow>Stats de session</Eyebrow>
+            <Eyebrow>Session</Eyebrow>
             <Row label="Mains jouées" value={`${stats.handsPlayed}`} />
             <Row label="Mains gagnées" value={`${stats.handsWon}`} />
-            <Row label="Net (jetons)" value={`${stats.netChips >= 0 ? "+" : ""}${stats.netChips}`} color={stats.netChips > 0 ? C.teal : stats.netChips < 0 ? "#E2533B" : C.text} />
-            <Row label="bb/100" value={`${bb100 >= 0 ? "+" : ""}${bb100.toFixed(1)}`} color={bb100 > 0 ? C.teal : bb100 < 0 ? "#E2533B" : C.text} />
           </div>
 
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14 }}>
-            <Eyebrow>Lecture des bots</Eyebrow>
-            <div style={{ fontSize: 11.5, color: read.hands >= FULL_CONFIDENCE_HANDS ? C.teal : "#E0913B", marginBottom: 8 }}>
-              {read.hands >= FULL_CONFIDENCE_HANDS ? `lecture fiable · ${read.hands} mains` : `lecture faible · ${read.hands} main${read.hands > 1 ? "s" : ""}`}
+            <Eyebrow>Plan d&apos;attaque des bots</Eyebrow>
+            <div style={{ fontSize: 11.5, color: read.hands >= FULL_CONFIDENCE_HANDS ? C.teal : "#E0913B", marginBottom: 10 }}>
+              {read.hands >= FULL_CONFIDENCE_HANDS
+                ? `lecture fiable · ${read.hands} mains observées`
+                : `lecture faible · ${read.hands} main${read.hands > 1 ? "s" : ""} observée${read.hands > 1 ? "s" : ""}`}
+            </div>
+
+            <div style={{ fontSize: 11, color: C.text3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
+              Ton profil (vu par les bots)
             </div>
             <Row label="VPIP" value={pct(read.vpip)} small />
             <Row label="PFR" value={pct(read.pfr)} small />
@@ -281,17 +288,22 @@ export default function PlayPage() {
             <Row label="Fold→3bet" value={pct(read.foldTo3bet)} small />
             <Row label="Agressivité (AF)" value={read.af.toFixed(1)} small />
             <Row label="WTSD" value={pct(read.wtsd)} small />
-            <div style={{ marginTop: 10 }}>
-              <Eyebrow>Ajustements</Eyebrow>
+
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11, color: C.text3, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
+                Détecté chez toi → comment ils t&apos;attaquent
+              </div>
               {adjustments.length === 0 ? (
-                <p style={{ fontSize: 11.5, color: C.text3, marginTop: 6 }}>Pas encore de fuite nette détectée — jeu équilibré.</p>
+                <p style={{ fontSize: 11.5, color: C.text3, marginTop: 6, lineHeight: 1.5 }}>
+                  Aucun angle exploitable détecté pour l&apos;instant — les bots jouent leur baseline.
+                </p>
               ) : (
-                <ul style={{ listStyle: "none", margin: "6px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                <ul style={{ listStyle: "none", margin: "6px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 7 }}>
                   {adjustments.map((a, i) => (
-                    <li key={i} style={{ fontSize: 11.5, lineHeight: 1.4 }}>
-                      <span style={{ color: "#E0913B" }}>{a.leak}</span>
-                      <span style={{ color: C.text3 }}> → </span>
-                      <span style={{ color: C.teal }}>{a.adjust}</span>
+                    <li key={i} style={{ fontSize: 11.5, lineHeight: 1.45 }}>
+                      <span style={{ color: "#E0913B" }}>Détecté : {a.leak}</span>
+                      <br />
+                      <span style={{ color: C.teal }}>↳ {a.adjust}</span>
                     </li>
                   ))}
                 </ul>
@@ -299,8 +311,51 @@ export default function PlayPage() {
             </div>
           </div>
         </aside>
+        </div>
       </div>
     </main>
+  );
+}
+
+function Scoreboard({ handsPlayed, heroNet, heroBb100 }: { handsPlayed: number; heroNet: number; heroBb100: number }) {
+  const botsNet = -heroNet;
+  const botsBb100 = -heroBb100;
+  const teal = "#2DD4A7";
+  const red = "#E2533B";
+  let verdict: string;
+  let vColor: string;
+  if (handsPlayed === 0) {
+    verdict = "Première main — qui va craquer ?";
+    vColor = "#9BA1AD";
+  } else if (heroNet > 0) {
+    verdict = `Tu domines les bots de ${heroBb100.toFixed(1)} bb/100`;
+    vColor = teal;
+  } else if (heroNet < 0) {
+    verdict = `Les bots te battent de ${Math.abs(heroBb100).toFixed(1)} bb/100`;
+    vColor = red;
+  } else {
+    verdict = "À égalité";
+    vColor = "#9BA1AD";
+  }
+
+  const Side = ({ label, net, bb, accent }: { label: string; net: number; bb: number; accent: string }) => (
+    <div style={{ textAlign: "center", minWidth: 120 }}>
+      <div style={{ fontSize: 11, letterSpacing: 1, textTransform: "uppercase", color: "#6B7280", fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, fontVariantNumeric: "tabular-nums", color: accent, marginTop: 2 }}>
+        {net >= 0 ? "+" : ""}{net}
+      </div>
+      <div style={{ fontSize: 12, color: "#9BA1AD", fontVariantNumeric: "tabular-nums" }}>{bb >= 0 ? "+" : ""}{bb.toFixed(1)} bb/100</div>
+    </div>
+  );
+
+  return (
+    <div style={{ background: "#171B23", border: `1px solid ${vColor}55`, borderRadius: 16, padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "center", gap: 22, flexWrap: "wrap" }}>
+      <Side label="Toi" net={heroNet} bb={heroBb100} accent={heroNet >= 0 ? teal : red} />
+      <div style={{ color: "#6B7280", fontWeight: 800, fontSize: 14 }}>VS</div>
+      <Side label="Les bots" net={botsNet} bb={botsBb100} accent={botsNet >= 0 ? teal : red} />
+      <div style={{ flexBasis: "100%", height: 0 }} />
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: vColor }}>{verdict}</div>
+    </div>
   );
 }
 
