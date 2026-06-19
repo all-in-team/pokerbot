@@ -21,15 +21,20 @@ describe("replayMultiway", () => {
       expect(s.revealed).toBe(false);
     }
 
-    // Last frame: award — winners highlighted, pot pushed, final stacks restored.
+    // Last frame: award — winners highlighted, final stacks restored, and the
+    // pot still shows the amount won (the climax displays the sum, never "0").
     const last = frames[frames.length - 1]!;
     expect(last.kind).toBe("award");
-    expect(last.pot).toBe(0);
+    const totalPot = log.state.players.reduce((a, p) => a + p.committedTotal, 0);
+    expect(last.pot).toBe(totalPot);
+    expect(last.pot).toBeGreaterThan(0);
     const winnerSeats = last.seats.filter((s) => s.isWinner).map((s) => s.seat).sort((a, b) => a - b);
     expect(winnerSeats).toEqual([...r.winners].sort((a, b) => a - b));
     for (const s of last.seats) {
       expect(s.stack).toBe(log.state.players[s.seat]!.stack);
     }
+    // No ghost bet chips linger in front of anyone at the award (all collected).
+    expect(last.seats.every((s) => s.bet === 0)).toBe(true);
 
     // If it went to showdown, the showdown beat reveals the live hands.
     if (r.showdown) {

@@ -29,6 +29,28 @@ export function evaluate(cards: Card[]): HandEval {
   return { rank: h.rank, name: h.name, descr: h.descr };
 }
 
+/**
+ * French hand-class label, derived straight from the evaluator's class rank
+ * (1 high card … 9 straight flush). This is a translation of the engine's own
+ * classification — nothing is invented or recomputed.
+ */
+const CATEGORY_FR: Record<number, string> = {
+  1: "Carte haute",
+  2: "Paire",
+  3: "Deux paires",
+  4: "Brelan",
+  5: "Quinte",
+  6: "Couleur",
+  7: "Full",
+  8: "Carré",
+  9: "Quinte flush",
+};
+
+/** French made-hand category for the best 5-card hand out of `cards` (5–7). */
+export function handCategoryFr(cards: Card[]): string {
+  return CATEGORY_FR[evaluate(cards).rank] ?? "—";
+}
+
 export type Comparison = -1 | 0 | 1;
 
 /**

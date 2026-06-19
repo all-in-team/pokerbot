@@ -8,11 +8,16 @@
  */
 
 import { playHand, playRingSession, type HandLog } from "@/sim/match.js";
-import { heuristicFromPersonality, type PersonalityName } from "@/bots/heuristic.js";
+import { createHeuristicBot } from "@/bots/heuristic.js";
 import type { Bot } from "@/bots/types.js";
 import type { Seat } from "@/engine/state.js";
 
-const ROTATION: PersonalityName[] = ["TAG", "LAG", "nit", "maniac", "TAG", "LAG"];
+/**
+ * Every seat runs the SAME EV-seeking heuristic brain (no TAG/LAG/nit/maniac
+ * archetypes). Seats differ only by an independent RNG seed, so play varies
+ * without giving anyone a divergent style.
+ */
+const EV_BRAIN = { tightness: 0.62, aggression: 0.6, bluffFreq: 0.12 } as const;
 
 export interface WatchTable {
   bots: Bot[];
@@ -37,10 +42,9 @@ export interface WatchTableOptions {
 export function createWatchTable(opts: WatchTableOptions = {}): WatchTable {
   const seats = Math.max(2, Math.min(6, opts.seats ?? 6));
   const seed = opts.seed ?? "watch";
-  const bots: Bot[] = Array.from({ length: seats }, (_, i) => {
-    const p = ROTATION[i % ROTATION.length]!;
-    return heuristicFromPersonality(`${p}-${i}`, p, `${seed}:bot${i}`);
-  });
+  const bots: Bot[] = Array.from({ length: seats }, (_, i) =>
+    createHeuristicBot({ name: `Bot ${i + 1}`, style: "EV", seed: `${seed}:bot${i}`, ...EV_BRAIN }),
+  );
   return {
     bots,
     seats,

@@ -2,29 +2,80 @@
 
 /**
  * HandReplayer — drives a list of Frames (from replayMultiway) over a poker
- * table. Controls: play / pause / step / speed slider + a "reveal all cards"
- * toggle (opponents are hidden until showdown by default). Shows an action log
- * beside the table. In play mode, each frame dwells for a kind-dependent time.
+ * table. Modern dark control bar: skip-back / play-pause / skip-forward icon
+ * buttons, a teal speed slider, a switch toggle to reveal all cards (opponents
+ * hidden until showdown by default), and a teal "Main suivante" primary button.
+ * A styled action-history panel sits beside the table.
  */
 
 import React, { useEffect, useState } from "react";
 import PokerTableView from "@/components/PokerTableView.js";
 import { FRAME_MS, type Frame } from "@/lib/client/replayMultiway.js";
+import type { ActionType } from "@/engine/state.js";
 
-function btn(bg: string): React.CSSProperties {
-  return {
-    appearance: "none",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: 10,
-    background: bg,
-    color: "#fff",
-    cursor: "pointer",
-    minHeight: 40,
-    padding: "8px 14px",
-    fontSize: 14,
-    fontWeight: 700,
-    WebkitTapHighlightColor: "transparent",
-  };
+const C = {
+  appBg: "#0E1117",
+  surface: "#171B23",
+  border: "rgba(255,255,255,0.08)",
+  text: "#E6E8EC",
+  text2: "#9BA1AD",
+  text3: "#6B7280",
+  teal: "#2DD4A7",
+};
+
+// Action-tag colours for the log.
+const ACTION_COLOR: Partial<Record<ActionType, string>> = {
+  fold: "#6B93D6",
+  check: "#21B07A",
+  call: "#21B07A",
+  bet: "#E0913B",
+  raise: "#E0913B",
+};
+
+function IconButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+  return (
+    <button className="wr-icon" aria-label={label} onClick={onClick} disabled={disabled} style={{ opacity: disabled ? 0.4 : 1 }}>
+      {children}
+    </button>
+  );
+}
+
+function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.text2, cursor: "pointer", userSelect: "none" }}>
+      <span
+        role="switch"
+        aria-checked={checked}
+        tabIndex={0}
+        onClick={() => onChange(!checked)}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onChange(!checked))}
+        style={{
+          width: 38,
+          height: 22,
+          borderRadius: 999,
+          background: checked ? C.teal : "rgba(255,255,255,0.14)",
+          border: `1px solid ${checked ? C.teal : C.border}`,
+          position: "relative",
+          transition: "background .18s ease",
+          flex: "0 0 auto",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            left: checked ? 18 : 2,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            background: "#0E1117",
+            transition: "left .18s ease",
+          }}
+        />
+      </span>
+      {label}
+    </label>
+  );
 }
 
 export default function HandReplayer({ frames, onNextHand }: { frames: Frame[]; onNextHand?: () => void }) {
@@ -33,7 +84,6 @@ export default function HandReplayer({ frames, onNextHand }: { frames: Frame[]; 
   const [speed, setSpeed] = useState(1);
   const [revealAll, setRevealAll] = useState(false);
 
-  // New hand → restart from the deal and auto-play.
   useEffect(() => {
     setIndex(0);
     setPlaying(true);
@@ -41,7 +91,6 @@ export default function HandReplayer({ frames, onNextHand }: { frames: Frame[]; 
 
   const atEnd = index >= frames.length - 1;
 
-  // Advance while playing, dwelling per frame kind / speed.
   useEffect(() => {
     if (!playing || atEnd) return;
     const kind = frames[index]?.kind ?? "action";
@@ -61,46 +110,69 @@ export default function HandReplayer({ frames, onNextHand }: { frames: Frame[]; 
     setPlaying(false);
     setIndex((i) => Math.max(0, Math.min(frames.length - 1, i + d)));
   };
+  const togglePlay = () => (atEnd ? (setIndex(0), setPlaying(true)) : setPlaying((p) => !p));
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 240px", gap: 16, alignItems: "start" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 252px", gap: 18, alignItems: "start" }}>
+      <style>{`
+        .wr-icon { appearance:none; width:42px; height:42px; border-radius:11px; border:1px solid ${C.border};
+          background:#0E1117; color:${C.text}; font-size:16px; cursor:pointer; display:grid; place-items:center;
+          transition: background .15s ease, border-color .15s ease, transform .08s ease; }
+        .wr-icon:hover:not(:disabled){ background:#1F2530; border-color:rgba(255,255,255,0.18); }
+        .wr-icon:active:not(:disabled){ transform:scale(0.94); }
+        .wr-primary { appearance:none; border:none; border-radius:11px; background:${C.teal}; color:#08130F;
+          font-weight:800; font-size:14px; padding:0 18px; height:42px; cursor:pointer;
+          transition: filter .15s ease, transform .08s ease; }
+        .wr-primary:hover{ filter:brightness(1.08); }
+        .wr-primary:active{ transform:scale(0.97); }
+        .wr-range { accent-color:${C.teal}; cursor:pointer; }
+        .wr-scrub { accent-color:#38bdf8; cursor:pointer; }
+      `}</style>
+
       <div>
         <PokerTableView state={frame} revealAll={revealAll} />
 
-        {/* Controls */}
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 12 }}>
-          <button style={btn("#1f2937")} onClick={() => step(-1)} disabled={index === 0} aria-label="Étape précédente">
-            ⏮
-          </button>
-          <button style={btn(playing ? "#7f1d1d" : "#15803d")} onClick={() => (atEnd ? (setIndex(0), setPlaying(true)) : setPlaying((p) => !p))}>
-            {playing ? "⏸ Pause" : atEnd ? "↻ Rejouer" : "▶ Play"}
-          </button>
-          <button style={btn("#1f2937")} onClick={() => step(1)} disabled={atEnd} aria-label="Étape suivante">
-            ⏭
-          </button>
+        {/* Caption */}
+        <div style={{ textAlign: "center", marginTop: 12, minHeight: 22, fontSize: 15, fontWeight: 700, color: frame.kind === "award" ? C.teal : C.text }}>
+          {frame.caption}
+        </div>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#cbd5e1" }}>
+        {/* Control bar */}
+        <div
+          style={{
+            marginTop: 12,
+            padding: "12px 14px",
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 14,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 14,
+          }}
+        >
+          <div style={{ display: "flex", gap: 8 }}>
+            <IconButton label="Étape précédente" onClick={() => step(-1)} disabled={index === 0}>
+              ⏮
+            </IconButton>
+            <IconButton label={playing ? "Pause" : "Lecture"} onClick={togglePlay}>
+              {playing ? "⏸" : atEnd ? "↻" : "▶"}
+            </IconButton>
+            <IconButton label="Étape suivante" onClick={() => step(1)} disabled={atEnd}>
+              ⏭
+            </IconButton>
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.text2 }}>
             Vitesse
-            <input
-              type="range"
-              min={0.5}
-              max={4}
-              step={0.5}
-              value={speed}
-              onChange={(e) => setSpeed(Number(e.target.value))}
-              aria-label="Vitesse"
-              style={{ accentColor: "#f59e0b" }}
-            />
-            <span style={{ width: 28, textAlign: "right" }}>{speed}×</span>
+            <input className="wr-range" type="range" min={0.5} max={4} step={0.5} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} aria-label="Vitesse" />
+            <span style={{ width: 26, textAlign: "right", fontVariantNumeric: "tabular-nums", color: C.text }}>{speed}×</span>
           </label>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#cbd5e1", marginLeft: "auto", cursor: "pointer" }}>
-            <input type="checkbox" checked={revealAll} onChange={(e) => setRevealAll(e.target.checked)} style={{ accentColor: "#22c55e" }} />
-            Révéler toutes les cartes
-          </label>
+          <Switch checked={revealAll} onChange={setRevealAll} label="Révéler les cartes" />
 
           {onNextHand && (
-            <button style={btn("#2563eb")} onClick={onNextHand}>
+            <button className="wr-primary" style={{ marginLeft: "auto" }} onClick={onNextHand}>
               Main suivante →
             </button>
           )}
@@ -108,6 +180,7 @@ export default function HandReplayer({ frames, onNextHand }: { frames: Frame[]; 
 
         {/* Scrubber */}
         <input
+          className="wr-scrub"
           type="range"
           min={0}
           max={frames.length - 1}
@@ -118,41 +191,45 @@ export default function HandReplayer({ frames, onNextHand }: { frames: Frame[]; 
             setIndex(Number(e.target.value));
           }}
           aria-label="Position dans la main"
-          style={{ width: "100%", marginTop: 10, accentColor: "#38bdf8" }}
+          style={{ width: "100%", marginTop: 12 }}
         />
-        <div style={{ textAlign: "center", fontSize: 12, color: "#64748b", marginTop: 2 }}>
-          frame {index + 1} / {frames.length}
+        <div style={{ textAlign: "center", fontSize: 12, color: C.text3, marginTop: 4, fontVariantNumeric: "tabular-nums" }}>
+          {index + 1} / {frames.length}
         </div>
       </div>
 
       {/* Action log */}
-      <aside
-        style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 12,
-          padding: 12,
-          maxHeight: 520,
-          overflowY: "auto",
-        }}
-      >
-        <div style={{ fontSize: 11, letterSpacing: 0.5, textTransform: "uppercase", color: "#94a3b8", marginBottom: 8 }}>
+      <aside style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, maxHeight: 540, overflowY: "auto" }}>
+        <div style={{ fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", color: C.text3, marginBottom: 10, fontWeight: 700 }}>
           Historique de la main
         </div>
-        <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-          {frames.slice(0, index + 1).map((f, i) => (
-            <li
-              key={i}
-              style={{
-                fontSize: 12.5,
-                lineHeight: 1.35,
-                color: i === index ? "#fbbf24" : f.kind === "award" ? "#22c55e" : "#cbd5e1",
-                fontWeight: i === index ? 800 : 500,
-              }}
-            >
-              {f.caption}
-            </li>
-          ))}
+        <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {frames.slice(0, index + 1).map((f, i) => {
+            const isCurrent = i === index;
+            const isAward = f.kind === "award";
+            const tagColor = f.actionType ? ACTION_COLOR[f.actionType] : undefined;
+            return (
+              <li
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: 12.5,
+                  lineHeight: 1.4,
+                  padding: "6px 8px",
+                  borderRadius: 8,
+                  borderTop: i === 0 ? "none" : `1px solid rgba(255,255,255,0.04)`,
+                  background: isAward ? "rgba(224,169,59,0.10)" : isCurrent ? "rgba(45,212,167,0.08)" : "transparent",
+                  color: isAward ? "#E0A93B" : isCurrent ? C.text : C.text2,
+                  fontWeight: isCurrent || isAward ? 700 : 500,
+                }}
+              >
+                <span style={{ width: 3, alignSelf: "stretch", borderRadius: 2, background: isAward ? "#E0A93B" : tagColor ?? "transparent", flex: "0 0 auto" }} />
+                <span>{f.caption}</span>
+              </li>
+            );
+          })}
         </ol>
       </aside>
     </div>

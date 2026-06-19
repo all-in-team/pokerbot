@@ -8,7 +8,8 @@
  */
 
 import { applyAction, createHand } from "@/engine/engine.js";
-import { pot as potOf, type GameState, type Position, type Seat } from "@/engine/state.js";
+import { handCategoryFr } from "@/engine/evaluator.js";
+import { pot as potOf, type ActionType, type GameState, type Position, type Seat } from "@/engine/state.js";
 import type { HandLog } from "@/sim/match.js";
 
 export type FrameKind = "deal" | "action" | "board" | "showdown" | "award";
@@ -52,6 +53,8 @@ export interface Frame {
   seats: SeatFrame[];
   caption: string;
   toAct: Seat | null;
+  /** The voluntary action on this frame (action/board frames), for log tags. */
+  actionType?: ActionType;
 }
 
 interface FrameOpts {
@@ -70,11 +73,14 @@ function buildFrame(state: GameState, opts: FrameOpts): Frame {
   const awarded = result?.awarded ?? [];
   const winners = opts.showWinners && result ? new Set<Seat>(result.winners) : new Set<Seat>();
 
-  const bets = state.players.map((p) => p.committedThisStreet);
-  const totalBets = bets.reduce((a, b) => a + b, 0);
-  // Central pot: collected chips (everything committed minus what's still in front).
-  // On the award frame the pot has been pushed to the winners.
-  const pot = opts.pushed ? 0 : potOf(state) - totalBets;
+  // A hand-ending frame (showdown or win-by-fold) is "terminal": chips are
+  // collected into the pot for display, so the central pot shows the full sum
+  // (the climax displays the amount won — no "POT 0") and NOTHING lingers in
+  // front of any seat (no ghost bet chips). Note: a win by fold resolves without
+  // the engine sweeping committedThisStreet, so we collect it here at display.
+  const terminal = result !== null;
+  const totalBets = state.players.reduce((a, p) => a + p.committedThisStreet, 0);
+  const pot = terminal ? potOf(state) : potOf(state) - totalBets;
 
   const seats: SeatFrame[] = state.players.map((p, i) => {
     // Pre-award frames (result set but chips not yet "pushed" in the animation)
@@ -85,7 +91,7 @@ function buildFrame(state: GameState, opts: FrameOpts): Frame {
       name: p.name,
       position: state.positions[i]!,
       stack,
-      bet: bets[i]!,
+      bet: terminal ? 0 : p.committedThisStreet,
       folded: p.folded,
       allIn: p.allIn,
       isButton: p.seat === state.button,
@@ -120,10 +126,13 @@ function awardCaption(state: GameState): string {
   const r = state.result!;
   const names = r.winners.map((s) => state.players[s]!.name).join(" & ");
   const total = r.winners.reduce((a, s) => a + (r.awarded[s] ?? 0), 0);
+  // Win by fold: no cards shown ⇒ no hand category.
   if (!r.showdown) return `${names} remporte le pot (${total})`;
-  const descr = r.handDescr?.[r.winners[0]!];
+  // At showdown: name the winning hand straight from the engine's evaluator.
+  const w = r.winners[0]!;
+  const category = handCategoryFr([...state.players[w]!.holeCards, ...state.board]);
   const verb = r.winners.length > 1 ? "se partagent" : "gagne";
-  return `${names} ${verb} ${total}${descr ? ` · ${descr}` : ""}`;
+  return `${names} ${verb} ${total} · ${category}`;
 }
 
 /** Re-run a logged hand into an ordered list of displayable frames. */
@@ -143,15 +152,15 @@ export function replayMultiway(log: HandLog): Frame[] {
     state = applyAction(state, d.action);
 
     const boardGrew = state.board.length > boardBefore;
-    frames.push(
-      buildFrame(state, {
-        kind: boardGrew ? "board" : "action",
-        caption: `${name} : ${verb}`,
-        reveal: false,
-        showWinners: false,
-        pushed: false,
-      }),
-    );
+    const f = buildFrame(state, {
+      kind: boardGrew ? "board" : "action",
+      caption: `${name} : ${verb}`,
+      reveal: false,
+      showWinners: false,
+      pushed: false,
+    });
+    f.actionType = d.action.type;
+    frames.push(f);
   }
 
   // Terminal beats: reveal at showdown, then push the pot to the winner(s).
