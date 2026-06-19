@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push:*)",
+      "Bash(git ls-remote:*)"
+    ]
+  },
+  "sandbox": {
+    "network": {
+      "allowedDomains": [
+        "github.com",
+        "api.github.com"
+      ]
+    }
+  }
+}
