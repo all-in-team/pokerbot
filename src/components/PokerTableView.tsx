@@ -86,6 +86,7 @@ function Card({
   return (
     <div
       role="img"
+      className="pt-card-in"
       aria-label={`${card.r} de ${suit.label}`}
       style={{
         ...base,

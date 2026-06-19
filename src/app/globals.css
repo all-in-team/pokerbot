@@ -134,6 +134,13 @@ body {
   100% { box-shadow: 0 0 0 12px rgba(45, 212, 167, 0); }
 }
 
+/* Cards deal-in / flip-up (board street-by-street, hero deal, showdown reveal). */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.94); }
+  to { opacity: 1; transform: none; }
+}
+.pt-card-in { animation: cardIn 0.24s ease both; }
+
 .to-act-ring {
   animation: pulse-ring 1.6s ease-out infinite;
 }

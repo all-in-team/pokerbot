@@ -12,6 +12,8 @@ import { pot as potOf, type AtLeastTwo, type GameState, type Seat } from "@/engi
 import type { ActionInput, LegalActions } from "@/engine/actions.js";
 import { buildView } from "@/sim/match.js";
 import { createHeuristicBot } from "@/bots/heuristic.js";
+import { createExploitBot } from "@/lib/client/exploitBot.js";
+import { EMPTY_READ, type HumanRead } from "@/lib/client/humanModel.js";
 import type { Bot } from "@/bots/types.js";
 import type { Frame, PotView, SeatFrame } from "@/lib/client/replayMultiway.js";
 
@@ -26,6 +28,8 @@ export interface PlayConfig {
   ante?: number; // 2 ($1/$2 ante $2)
   startingStack?: number; // 200 (100bb)
   seed?: string;
+  /** Live human read for exploitative adjustments (defaults to empty = no read). */
+  getRead?: () => HumanRead;
 }
 
 export interface PlayTable {
@@ -43,11 +47,15 @@ export function createPlayTable(opts: PlayConfig = {}): PlayTable {
   const seats = opts.seats ?? 6;
   const heroSeat = opts.heroSeat ?? 0;
   const seed = opts.seed ?? "play";
+  const getRead = opts.getRead ?? (() => EMPTY_READ);
   let botNo = 0;
   const bots: (Bot | null)[] = Array.from({ length: seats }, (_, i) => {
     if (i === heroSeat) return null;
     botNo += 1;
-    return createHeuristicBot({ name: `Bot ${botNo}`, style: "EV", seed: `${seed}:bot${i}`, ...EV_BRAIN });
+    // Heuristic baseline, wrapped with the exploitative layer (no-op until the
+    // read has confidence). BotBrain stays pluggable.
+    const base = createHeuristicBot({ name: `Bot ${botNo}`, style: "EV", seed: `${seed}:bot${i}`, ...EV_BRAIN });
+    return createExploitBot({ base, seed: `${seed}:bot${i}`, getRead, humanSeat: heroSeat });
   });
   return {
     bots,
@@ -118,9 +126,57 @@ export async function applyHuman(state: GameState, input: ActionInput, table: Pl
   return advance(applyAction(state, input), table);
 }
 
+/** Apply the human's action only (no auto-advance) — for the animated UI loop. */
+export function applyHumanRaw(state: GameState, input: ActionInput): GameState {
+  return applyAction(state, input);
+}
+
+/**
+ * Apply exactly ONE pending bot action (for animating bot turns one-by-one), or
+ * null if it's the human's turn or the hand is over.
+ */
+export async function botStep(state: GameState, table: PlayTable): Promise<GameState | null> {
+  if (state.street === "complete" || state.toAct === null || state.toAct === table.heroSeat) return null;
+  const bot = table.bots[state.toAct];
+  if (!bot) return null;
+  const decision = await bot.decide(buildView(state, state.toAct));
+  return applyAction(state, decision.action);
+}
+
+/** Whether it's a bot's turn to act (for the UI animation loop). */
+export function botToAct(state: GameState, heroSeat: Seat): boolean {
+  return state.street !== "complete" && state.toAct !== null && state.toAct !== heroSeat;
+}
+
 /** Stacks to carry into the next hand. */
 export function carryStacks(state: GameState): number[] {
   return state.players.map((p) => p.stack);
+}
+
+/** Human-readable label of the most recent voluntary action (for the callout). */
+export function lastActionLabel(state: GameState, table: PlayTable): string | null {
+  const a = [...state.actionHistory]
+    .reverse()
+    .find((x) => x.type !== "post-ante" && x.type !== "post-sb" && x.type !== "post-bb");
+  if (!a) return null;
+  const name = seatName(table, a.seat);
+  // For bet/raise the actor's committed-this-street IS the "to" amount right after
+  // they act (nobody has acted since), so the label reads naturally.
+  const to = state.players[a.seat]?.committedThisStreet ?? a.amount;
+  switch (a.type) {
+    case "fold":
+      return `${name} se couche`;
+    case "check":
+      return `${name} checke`;
+    case "call":
+      return `${name} suit (${a.amount})`;
+    case "bet":
+      return `${name} mise ${to}`;
+    case "raise":
+      return `${name} relance à ${to}`;
+    default:
+      return `${name} ${a.type}`;
+  }
 }
 
 /** Build a displayable Frame for PokerTableView from the live engine state. */
