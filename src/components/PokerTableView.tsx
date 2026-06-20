@@ -49,10 +49,13 @@ function Card({
   faceDown?: boolean;
   ghost?: boolean;
 }) {
+  // Sizes scale with the TABLE container width (cqw) and cap on large screens, so
+  // the table fits any container (mobile full-width or desktop column) without
+  // overflowing or overlapping.
   const dims = {
-    board: { w: "clamp(36px, 9vw, 54px)", r: "clamp(15px,4vw,21px)", c: "clamp(20px,5.4vw,30px)" },
-    seat: { w: "clamp(30px, 7.5vw, 44px)", r: "clamp(13px,3.4vw,18px)", c: "clamp(17px,4.4vw,25px)" },
-    back: { w: "clamp(26px, 6.4vw, 36px)", r: "0", c: "0" },
+    board: { w: "min(54px, 8.4cqw)", r: "min(21px, 3.3cqw)", c: "min(30px, 4.7cqw)" },
+    seat: { w: "min(44px, 6.8cqw)", r: "min(18px, 2.8cqw)", c: "min(25px, 3.9cqw)" },
+    back: { w: "min(36px, 5.6cqw)", r: "0", c: "0" },
   }[variant];
 
   const base: React.CSSProperties = {
@@ -126,7 +129,7 @@ function BetChip({ amount }: { amount: number }) {
       }}
     >
       <span style={{ width: 12, height: 12, borderRadius: "50%", background: C.gold, boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.3)" }} />
-      <span style={{ ...TAB, color: C.gold, fontWeight: 800, fontSize: "clamp(10px,2.8vw,12px)" }}>{amount}</span>
+      <span style={{ ...TAB, color: C.gold, fontWeight: 800, fontSize: "min(12px, 2.2cqw)" }}>{amount}</span>
     </div>
   );
 }
@@ -141,6 +144,15 @@ function Positioned({ xy, factor, z = 4, children }: { xy: { x: number; y: numbe
 
 function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number; y: number }; ante: number; reveal: boolean }) {
   const { x, y } = xy;
+  // Anchor each pod toward the table CENTRE (grow inward) so it never overflows an
+  // edge, however narrow the container is. Centre seats (x/y ≈ 50) stay centred.
+  const cx = x > 49 && x < 51;
+  const cy = y > 49 && y < 51;
+  const anchor: React.CSSProperties = {
+    ...(cx ? { left: "50%" } : x < 50 ? { left: `${x}%` } : { right: `${100 - x}%` }),
+    ...(cy ? { top: "50%" } : y < 50 ? { top: `${y}%` } : { bottom: `${100 - y}%` }),
+    transform: `translate(${cx ? "-50%" : "0"}, ${cy ? "-50%" : "0"})`,
+  };
   // Dealer button sits OUTSIDE the pod on its inner side (toward the table centre),
   // vertically centred → never over the cards / name / stack / position / bet.
   const dealerSide: React.CSSProperties = x <= 50 ? { left: "calc(100% + 8px)" } : { right: "calc(100% + 8px)" };
@@ -157,9 +169,7 @@ function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number;
     <div
       style={{
         position: "absolute",
-        left: `${x}%`,
-        top: `${y}%`,
-        transform: "translate(-50%, -50%)",
+        ...anchor,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -192,8 +202,8 @@ function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number;
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          padding: "6px 11px 6px 7px",
+          gap: "min(8px, 1.4cqw)",
+          padding: "min(6px,1.1cqw) min(11px,1.9cqw)",
           borderRadius: 12,
           background: C.surface,
           border: ring ? `2px solid ${ring}` : `1px solid ${C.border}`,
@@ -207,8 +217,8 @@ function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number;
       >
         <div
           style={{
-            width: "clamp(24px,6.2vw,32px)",
-            height: "clamp(24px,6.2vw,32px)",
+            width: "min(32px, 5cqw)",
+            height: "min(32px, 5cqw)",
             borderRadius: 9,
             background: "#0E1117",
             border: `1px solid ${C.border}`,
@@ -216,18 +226,18 @@ function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number;
             display: "grid",
             placeItems: "center",
             fontWeight: 800,
-            fontSize: "clamp(11px,3vw,13px)",
+            fontSize: "min(13px, 2.3cqw)",
             flex: "0 0 auto",
           }}
         >
           {seat.name.replace(/[^0-9]/g, "") || seat.name[0]}
         </div>
         <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2, gap: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "clamp(10px,2.8vw,12px)", color: C.text, fontWeight: 700 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "min(12px, 2.1cqw)", color: C.text, fontWeight: 700 }}>
             <span>{seat.name}</span>
             <span
               style={{
-                fontSize: "clamp(7px,2vw,9px)",
+                fontSize: "min(9px, 1.6cqw)",
                 fontWeight: 800,
                 letterSpacing: 0.5,
                 padding: "1px 5px",
@@ -239,17 +249,17 @@ function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number;
               {seat.position}
             </span>
             {seat.allIn && !seat.folded && (
-              <span style={{ fontSize: "clamp(7px,2vw,9px)", fontWeight: 800, color: "#F08A8A" }}>ALL-IN</span>
+              <span style={{ fontSize: "min(9px, 1.6cqw)", fontWeight: 800, color: "#F08A8A" }}>ALL-IN</span>
             )}
           </div>
-          <span style={{ ...TAB, fontSize: "clamp(10px,2.6vw,12px)", color: seat.isWinner ? C.gold : C.text2, fontWeight: 600 }}>
+          <span style={{ ...TAB, fontSize: "min(12px, 2cqw)", color: seat.isWinner ? C.gold : C.text2, fontWeight: 600 }}>
             {seat.folded ? "couché" : seat.stack}
           </span>
         </div>
       </div>
 
       {!seat.folded && ante > 0 && (
-        <span style={{ ...TAB, fontSize: "clamp(8px,2.2vw,10px)", color: C.text3 }}>ante {ante}</span>
+        <span style={{ ...TAB, fontSize: "min(10px, 1.7cqw)", color: C.text3 }}>ante {ante}</span>
       )}
 
       {seat.isButton && (
@@ -260,13 +270,13 @@ function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number;
             top: "50%",
             transform: "translateY(-50%)",
             ...dealerSide,
-            width: "clamp(22px,5.4vw,28px)",
-            height: "clamp(22px,5.4vw,28px)",
+            width: "min(28px, 4.4cqw)",
+            height: "min(28px, 4.4cqw)",
             borderRadius: "50%",
             background: "#F4F1E8",
             color: "#0E1117",
             fontWeight: 900,
-            fontSize: "clamp(11px,3vw,14px)",
+            fontSize: "min(14px, 2.3cqw)",
             display: "grid",
             placeItems: "center",
             boxShadow: "0 3px 8px rgba(0,0,0,0.55)",
@@ -304,6 +314,9 @@ export default function PokerTableView({
       className="watch-table"
       style={{
         width: "100%",
+        // Establish a container so all inner sizes scale with the TABLE width
+        // (cqw units) — fits any column / phone width without overflow.
+        containerType: "inline-size",
         background: C.surface,
         color: C.text,
         fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
@@ -315,7 +328,8 @@ export default function PokerTableView({
     >
       <style>{`@media (prefers-reduced-motion: reduce){ .watch-table *{ transition:none !important; } }`}</style>
 
-      <div style={{ position: "relative", width: "100%", aspectRatio: "1.5 / 1", margin: "0 auto" }}>
+      {/* Taller (more square) on narrow containers so 6 seats have vertical room. */}
+      <div className="pt-table-aspect" style={{ position: "relative", width: "100%", margin: "0 auto" }}>
         {/* rail + refined felt */}
         <div style={{ position: "absolute", inset: "6%", borderRadius: "50% / 50%", background: "#0E1117", padding: "clamp(7px,2vw,13px)", boxShadow: "0 24px 50px rgba(0,0,0,0.6)" }}>
           <div
@@ -331,21 +345,21 @@ export default function PokerTableView({
         </div>
 
         {/* board */}
-        <div style={{ position: "absolute", left: "50%", top: "39%", transform: "translate(-50%, -50%)", display: "flex", gap: "clamp(4px,1.4vw,8px)", zIndex: 2 }}>
+        <div style={{ position: "absolute", left: "50%", top: "39%", transform: "translate(-50%, -50%)", display: "flex", gap: "min(8px, 1.3cqw)", zIndex: 2 }}>
           {[0, 1, 2, 3, 4].map((i) => (board[i] ? <Card key={i} card={board[i]} variant="board" /> : <Card key={i} variant="board" ghost />))}
         </div>
 
         {/* pot */}
         <div style={{ position: "absolute", left: "50%", top: "62%", transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 2 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            <span style={{ width: 14, height: 14, borderRadius: "50%", background: C.gold, boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.3)" }} />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "min(8px, 1.5cqw)" }}>
+            <span style={{ width: "min(14px, 2.6cqw)", height: "min(14px, 2.6cqw)", borderRadius: "50%", background: C.gold, boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.3)" }} />
             <div style={{ textAlign: "left", lineHeight: 1 }}>
-              <div style={{ fontSize: 10, letterSpacing: 1.5, color: C.text3, fontWeight: 700 }}>{climax ? "GAGNÉ" : "POT"}</div>
-              <div style={{ ...TAB, fontSize: 26, fontWeight: 800, color: climax ? C.gold : "#FFFFFF", marginTop: 2 }}>{state.pot}</div>
+              <div style={{ fontSize: "min(10px, 1.9cqw)", letterSpacing: 1.5, color: C.text3, fontWeight: 700 }}>{climax ? "GAGNÉ" : "POT"}</div>
+              <div style={{ ...TAB, fontSize: "min(26px, 5.2cqw)", fontWeight: 800, color: climax ? C.gold : "#FFFFFF", marginTop: 2 }}>{state.pot}</div>
             </div>
           </div>
           {state.pots.length > 1 && (
-            <div style={{ ...TAB, marginTop: 6, fontSize: "clamp(9px,2.4vw,11px)", color: C.text2 }}>
+            <div style={{ ...TAB, marginTop: 6, fontSize: "min(11px, 2cqw)", color: C.text2 }}>
               {state.pots.map((p) => `${p.label} ${p.amount}`).join(" · ")}
             </div>
           )}

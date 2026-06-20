@@ -317,10 +317,13 @@ export default function PlayPage() {
       />
 
       <div style={{ maxWidth: 1040, margin: "0 auto", padding: "clamp(16px,4vw,28px)" }}>
-        <Scoreboard handsPlayed={stats.handsPlayed} heroNet={stats.netChips} heroBb100={bb100} />
-
-        <div style={{ display: "grid", gap: 18, gridTemplateColumns: "minmax(0,1fr) 260px", alignItems: "start", marginTop: 16 }}>
-        <div>
+        {/* Mobile: single column (table → action bar → scoreboard → panels).
+            Desktop (lg): scoreboard full-width on top, then table | side panels. */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-4 items-start">
+          <div className="order-2 lg:order-1 lg:col-span-2">
+            <Scoreboard handsPlayed={stats.handsPlayed} heroNet={stats.netChips} heroBb100={bb100} />
+          </div>
+          <div className="order-1 lg:order-2 min-w-0">
           <PokerTableView state={frame} heroSeat={HERO} revealAll={complete && autoReveal} />
 
           {/* Transient action callout */}
@@ -403,8 +406,8 @@ export default function PlayPage() {
           </div>
         </div>
 
-        {/* Right column: session + the bots' attack plan (adversarial, no advice) */}
-        <aside style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* Right column on desktop; stacked full-width below on mobile. */}
+        <aside className="order-3" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14 }}>
             <Eyebrow>Session</Eyebrow>
             <Row label="Mains jouées" value={`${stats.handsPlayed}`} />

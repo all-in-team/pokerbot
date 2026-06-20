@@ -33,27 +33,23 @@ export function TopNav({ right }: { right?: ReactNode }) {
       }}
     >
       <div
-        style={{
-          maxWidth: 1400,
-          margin: "0 auto",
-          padding: "10px clamp(16px,4vw,28px)",
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-        }}
+        className="flex items-center gap-3 flex-wrap md:flex-nowrap"
+        style={{ maxWidth: 1400, margin: "0 auto", padding: "10px clamp(16px,4vw,28px)" }}
       >
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+        <Link href="/" className="shrink-0" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
           <span style={{ color: "var(--color-teal)", fontSize: 18 }}>♠</span>
           <span style={{ fontWeight: 800, letterSpacing: -0.2, color: "var(--color-cream)" }}>PokerHub</span>
         </Link>
 
-        <nav style={{ display: "flex", gap: 4, marginLeft: 6 }}>
+        {/* Mobile: full-width scrollable row below the logo. Desktop: inline. */}
+        <nav className="no-scrollbar flex gap-1 overflow-x-auto order-last basis-full md:order-none md:basis-auto">
           {LINKS.map((l) => {
             const active = isActive(l.href);
             return (
               <Link
                 key={l.href}
                 href={l.href}
+                className="shrink-0 whitespace-nowrap"
                 style={{
                   padding: "6px 12px",
                   borderRadius: 9,
@@ -72,7 +68,7 @@ export function TopNav({ right }: { right?: ReactNode }) {
           })}
         </nav>
 
-        {right && <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>{right}</div>}
+        {right && <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">{right}</div>}
       </div>
     </header>
   );
