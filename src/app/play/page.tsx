@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TopNav } from "@/components/TopNav.js";
 import PokerTableView from "@/components/PokerTableView.js";
+import { BrainAudit } from "@/components/BrainAudit.js";
 import { THEME as C } from "@/lib/theme.js";
 import { pot as potOf, type GameState } from "@/engine/state.js";
 import { handCategoryFr } from "@/engine/evaluator.js";
@@ -471,6 +472,8 @@ export default function PlayPage() {
               )}
             </div>
           </div>
+
+          <BrainAudit />
         </aside>
         </div>
       </div>
