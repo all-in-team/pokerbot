@@ -32,84 +32,84 @@ function botCanBetView(humanSeat = 0, botSeat = 3): DecisionView {
 const passiveBase: Decision = { action: { type: "check" }, perceivedEquity: 0.3 };
 
 describe("profileStore — create / read / update", () => {
-  it("round-trips a profile through save → load", () => {
+  it("round-trips a profile through save → load", async () => {
     const store = createProfileStore(memoryBackend());
     const p = createProfile("Baki", { id: "a", now: 1000 });
-    store.saveProfile(p);
+    await store.saveProfile(p);
 
-    const loaded = store.loadProfile("a");
+    const loaded = await store.loadProfile("a");
     expect(loaded).not.toBeNull();
     expect(loaded!.name).toBe("Baki");
     expect(loaded!.lifetime.handsPlayed).toBe(0);
   });
 
-  it("returns null for an unknown id", () => {
+  it("returns null for an unknown id", async () => {
     const store = createProfileStore(memoryBackend());
-    expect(store.loadProfile("nope")).toBeNull();
+    expect(await store.loadProfile("nope")).toBeNull();
   });
 
-  it("saveProfile overwrites (update) an existing profile", () => {
+  it("saveProfile overwrites (update) an existing profile", async () => {
     const store = createProfileStore(memoryBackend());
     const p = createProfile("Baki", { id: "a", now: 1000 });
-    store.saveProfile(p);
-    store.saveProfile({ ...p, name: "Baki2", lifetime: accumulateHand(p.lifetime, { net: 10, bigBlind: 2 }) });
+    await store.saveProfile(p);
+    await store.saveProfile({ ...p, name: "Baki2", lifetime: accumulateHand(p.lifetime, { net: 10, bigBlind: 2 }) });
 
-    const loaded = store.loadProfile("a")!;
+    const loaded = (await store.loadProfile("a"))!;
     expect(loaded.name).toBe("Baki2");
     expect(loaded.lifetime.handsPlayed).toBe(1);
     expect(loaded.lifetime.netChips).toBe(10);
   });
 
-  it("lists profiles (newest first) and deletes them", () => {
+  it("lists profiles (newest first) and deletes them", async () => {
     const store = createProfileStore(memoryBackend());
-    store.saveProfile(createProfile("Old", { id: "a", now: 1000 }));
-    store.saveProfile(createProfile("New", { id: "b", now: 2000 }));
+    await store.saveProfile(createProfile("Old", { id: "a", now: 1000 }));
+    await store.saveProfile(createProfile("New", { id: "b", now: 2000 }));
 
-    const list = store.listProfiles();
+    const list = await store.listProfiles();
     expect(list.map((p) => p.id)).toEqual(["b", "a"]);
 
-    store.deleteProfile("a");
-    expect(store.listProfiles().map((p) => p.id)).toEqual(["b"]);
-    expect(store.loadProfile("a")).toBeNull();
+    await store.deleteProfile("a");
+    expect((await store.listProfiles()).map((p) => p.id)).toEqual(["b"]);
+    expect(await store.loadProfile("a")).toBeNull();
   });
 
-  it("tracks the active profile id and clears it on delete", () => {
+  it("tracks the active profile id and clears it on delete", async () => {
     const store = createProfileStore(memoryBackend());
-    store.saveProfile(createProfile("Baki", { id: "a" }));
+    await store.saveProfile(createProfile("Baki", { id: "a" }));
     store.setActiveId("a");
     expect(store.getActiveId()).toBe("a");
-    store.deleteProfile("a");
+    await store.deleteProfile("a");
     expect(store.getActiveId()).toBeNull();
   });
 
-  it("ignores corrupted entries instead of throwing", () => {
+  it("ignores corrupted entries instead of throwing", async () => {
     const backend = memoryBackend({ "pokerbot:play:profile:bad": "{not json" });
     const store = createProfileStore(backend);
-    expect(store.listProfiles()).toEqual([]);
-    expect(store.loadProfile("bad")).toBeNull();
+    expect(await store.listProfiles()).toEqual([]);
+    expect(await store.loadProfile("bad")).toBeNull();
   });
 });
 
 describe("profileStore — lifetime accumulation across sessions", () => {
-  it("accumulates results over several persisted sessions (winrate evolves)", () => {
+  it("accumulates results over several persisted sessions (winrate evolves)", async () => {
     const backend = memoryBackend(); // shared device storage across sessions
 
     // Session 1: a fresh store loads/creates the profile, plays 2 hands.
     const s1 = createProfileStore(backend);
     let p = createProfile("Baki", { id: "a" });
-    s1.saveProfile(p);
+    await s1.saveProfile(p);
     p = { ...p, lifetime: accumulateHand(p.lifetime, { net: 20, bigBlind: 2 }) }; // win
     p = { ...p, lifetime: accumulateHand(p.lifetime, { net: -8, bigBlind: 2 }) }; // loss
-    s1.saveProfile(p);
+    await s1.saveProfile(p);
 
     // Session 2: a brand-new store on the SAME backend continues the same profile.
     const s2 = createProfileStore(backend);
-    let p2 = s2.loadProfile("a")!;
-    expect(p2.lifetime.handsPlayed).toBe(2); // remembered across "sessions"
-    p2 = { ...p2, lifetime: accumulateHand(p2.lifetime, { net: 12, bigBlind: 2 }) }; // win
-    s2.saveProfile(p2);
+    const p2base = (await s2.loadProfile("a"))!;
+    expect(p2base.lifetime.handsPlayed).toBe(2); // remembered across "sessions"
+    const p2 = { ...p2base, lifetime: accumulateHand(p2base.lifetime, { net: 12, bigBlind: 2 }) }; // win
+    await s2.saveProfile(p2);
 
-    const final = createProfileStore(backend).loadProfile("a")!;
+    const final = (await createProfileStore(backend).loadProfile("a"))!;
     expect(final.lifetime.handsPlayed).toBe(3);
     expect(final.lifetime.handsWon).toBe(2);
     expect(final.lifetime.handsLost).toBe(1);
@@ -183,20 +183,20 @@ describe("full cycle — quit & return: lifetime + bot exploitation persist", ()
     expect(plan.prob).toBeGreaterThan(0);
   });
 
-  it("play → quit → return under the same pseudo keeps stats AND the bots' reads", () => {
+  it("play → quit → return under the same pseudo keeps stats AND the bots' reads", async () => {
     const backend = memoryBackend(); // the device's localStorage, surviving sessions
 
     // --- Session 1: play under "Baki" ---
     const s1 = createProfileStore(backend);
     let p = createProfile("Baki", { id: "a" });
-    s1.saveProfile(p);
+    await s1.saveProfile(p);
     s1.setActiveId("a");
     // lifetime results accumulate…
     p = { ...p, lifetime: accumulateHand(p.lifetime, { net: 20, bigBlind: 2 }) }; // win
     p = { ...p, lifetime: accumulateHand(p.lifetime, { net: -5, bigBlind: 2 }) }; // loss
     // …and so does the read the bots exploit (an over-folder).
     p = { ...p, stats: mkStats({ hands: 40, foldToCbet: { n: 30, d: 40 } }) };
-    s1.saveProfile(p);
+    await s1.saveProfile(p);
 
     // While playing, the bots already exploit this leak.
     expect(exploitPlan(botCanBetView(HUMAN), passiveBase, readOf(p.stats), HUMAN).kind).toBe("bluff");
@@ -204,7 +204,7 @@ describe("full cycle — quit & return: lifetime + bot exploitation persist", ()
     // --- Quit (drop the store), then RETURN: a fresh store on the same device. ---
     const s2 = createProfileStore(backend);
     expect(s2.getActiveId()).toBe("a"); // remembers who was playing
-    const reloaded = s2.loadProfile(s2.getActiveId()!)!;
+    const reloaded = (await s2.loadProfile(s2.getActiveId()!))!;
 
     // Lifetime stats are intact — NOT reset.
     expect(reloaded.name).toBe("Baki");

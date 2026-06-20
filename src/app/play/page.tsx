@@ -57,6 +57,7 @@ export default function PlayPage() {
   const [state, setState] = useState<GameState | null>(null);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [profiles, setProfiles] = useState<PlayerProfile[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
   const [showPicker, setShowPicker] = useState(true);
   const [stats, setStats] = useState<Stats>({ handsPlayed: 0, handsWon: 0, netChips: 0 });
   const [read, setRead] = useState<HumanRead>(readOf(emptyHumanStats()));
@@ -89,7 +90,8 @@ export default function PlayPage() {
           updatedAt: Date.now(),
         };
         profileRef.current = updated;
-        store.saveProfile(updated);
+        // Persist in the background — never block the table on a network write.
+        void store.saveProfile(updated).catch((e) => console.warn("[profiles] save failed:", e));
         setProfile(updated);
       }
     }
@@ -143,26 +145,43 @@ export default function PlayPage() {
     void deal();
   }, [deal, store]);
 
+  // Reload the saved-profiles list (async: backend may be the network).
+  const refreshProfiles = useCallback(async () => {
+    setProfilesLoading(true);
+    try {
+      setProfiles(await store.listProfiles());
+    } catch (e) {
+      console.warn("[profiles] list failed:", e);
+    } finally {
+      setProfilesLoading(false);
+    }
+  }, [store]);
+
   const createAndSelect = useCallback((name: string) => {
     const p = createProfile(name);
-    store.saveProfile(p);
-    setProfiles(store.listProfiles());
-    selectProfile(p);
-  }, [selectProfile, store]);
+    selectProfile(p); // start playing immediately (optimistic)
+    void store.saveProfile(p).then(refreshProfiles).catch((e) => console.warn("[profiles] save failed:", e));
+  }, [selectProfile, store, refreshProfiles]);
 
   const removeProfile = useCallback((id: string) => {
-    store.deleteProfile(id);
-    setProfiles(store.listProfiles());
     if (profileRef.current?.id === id) {
       profileRef.current = null;
       setProfile(null);
       setShowPicker(true);
     }
-  }, [store]);
+    void store.deleteProfile(id).then(refreshProfiles).catch((e) => console.warn("[profiles] delete failed:", e));
+  }, [store, refreshProfiles]);
 
   // Load the device's saved profiles on mount (no auto-deal: the player chooses first).
   useEffect(() => {
-    setProfiles(store.listProfiles());
+    let alive = true;
+    setProfilesLoading(true);
+    store
+      .listProfiles()
+      .then((list) => { if (alive) setProfiles(list); })
+      .catch((e) => console.warn("[profiles] list failed:", e))
+      .finally(() => { if (alive) setProfilesLoading(false); });
+    return () => { alive = false; };
   }, [store]);
 
   // Reset the bet slider when it becomes the hero's turn.
@@ -207,6 +226,7 @@ export default function PlayPage() {
         <TopNav />
         <ProfilePicker
           profiles={profiles}
+          loading={profilesLoading}
           activeId={null}
           onSelect={selectProfile}
           onCreate={createAndSelect}
@@ -283,7 +303,7 @@ export default function PlayPage() {
         right={
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
-              onClick={() => { setProfiles(store.listProfiles()); setShowPicker(true); }}
+              onClick={() => { void refreshProfiles(); setShowPicker(true); }}
               style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: C.text, cursor: "pointer", padding: "6px 12px", borderRadius: 999, background: C.surface, border: `1px solid ${C.teal}55` }}
               title="Changer de profil"
             >
@@ -456,6 +476,7 @@ export default function PlayPage() {
       {showPicker && (
         <ProfilePicker
           profiles={profiles}
+          loading={profilesLoading}
           activeId={profile.id}
           onSelect={selectProfile}
           onCreate={createAndSelect}
@@ -469,9 +490,10 @@ export default function PlayPage() {
 }
 
 function ProfilePicker({
-  profiles, activeId, onSelect, onCreate, onDelete, dismissable, onClose,
+  profiles, loading, activeId, onSelect, onCreate, onDelete, dismissable, onClose,
 }: {
   profiles: PlayerProfile[];
+  loading: boolean;
   activeId: string | null;
   onSelect: (p: PlayerProfile) => void;
   onCreate: (name: string) => void;
@@ -500,10 +522,14 @@ function ProfilePicker({
           )}
         </div>
         <p style={{ margin: "0 0 16px", fontSize: 12.5, color: C.text2, lineHeight: 1.5 }}>
-          Tes stats à vie et la lecture des bots sont sauvegardées sur cet appareil. Reprends un profil ou crée-en un nouveau.
+          Tes stats à vie et la lecture des bots sont sauvegardées (cet appareil ou le cloud). Reprends un profil ou crée-en un nouveau.
         </p>
 
-        {profiles.length > 0 && (
+        {loading && (
+          <div style={{ padding: "14px 0", textAlign: "center", fontSize: 13, color: C.text3 }}>Chargement des profils…</div>
+        )}
+
+        {!loading && profiles.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16, maxHeight: 280, overflowY: "auto" }}>
             {profiles.map((p) => {
               const life = lifetimeBb100(p.lifetime);

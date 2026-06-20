@@ -5,12 +5,14 @@
  *
  * Architecture:
  *   - `ProfileStore` is the persistence interface (list/load/save/delete + active id).
- *   - `KeyValueStore` is a tiny localStorage-shaped backend the store sits on.
- *   - `localStorageBackend()` is the real impl; `memoryBackend()` is for tests/SSR.
+ *   - `KeyValueStore` is a tiny localStorage-shaped backend the local store sits on.
+ *   - `localStorageBackend()`/`memoryBackend()` (tests/SSR) feed `createProfileStore`.
+ *   - `supabaseBackend()` is a cloud ProfileStore (used when env vars are present).
  *   - A profile stores LIFETIME results (cumulative across sessions) AND the
  *     human read model (`HumanStats`) the bots remember about this player.
  */
 
+import { createClient } from "@supabase/supabase-js";
 import { emptyHumanStats, type HumanStats } from "@/lib/client/humanModel.js";
 
 export interface ProfileLifetime {
@@ -32,12 +34,16 @@ export interface PlayerProfile {
   stats: HumanStats;
 }
 
-/** Persistence boundary. Swap the implementation (Supabase, …) without touching callers. */
+/**
+ * Persistence boundary. Swap the implementation (localStorage ↔ Supabase) without
+ * touching callers. Data methods are ASYNC (a real backend is network-bound); the
+ * active-profile id is a sync DEVICE preference (always local).
+ */
 export interface ProfileStore {
-  listProfiles(): PlayerProfile[];
-  loadProfile(id: string): PlayerProfile | null;
-  saveProfile(profile: PlayerProfile): void;
-  deleteProfile(id: string): void;
+  listProfiles(): Promise<PlayerProfile[]>;
+  loadProfile(id: string): Promise<PlayerProfile | null>;
+  saveProfile(profile: PlayerProfile): Promise<void>;
+  deleteProfile(id: string): Promise<void>;
   getActiveId(): string | null;
   setActiveId(id: string | null): void;
 }
@@ -145,9 +151,10 @@ function parse(raw: string | null): PlayerProfile | null {
 
 // ── Store + backends ──────────────────────────────────────────────────────────
 
+/** ProfileStore over a sync key/value backend (localStorage / memory). */
 export function createProfileStore(backend: KeyValueStore): ProfileStore {
   return {
-    listProfiles() {
+    async listProfiles() {
       return backend
         .keys()
         .filter((k) => k.startsWith(PREFIX))
@@ -155,13 +162,13 @@ export function createProfileStore(backend: KeyValueStore): ProfileStore {
         .filter((p): p is PlayerProfile => p !== null)
         .sort((a, b) => b.updatedAt - a.updatedAt);
     },
-    loadProfile(id) {
+    async loadProfile(id) {
       return parse(backend.getItem(keyOf(id)));
     },
-    saveProfile(profile) {
+    async saveProfile(profile) {
       backend.setItem(keyOf(profile.id), JSON.stringify(profile));
     },
-    deleteProfile(id) {
+    async deleteProfile(id) {
       backend.removeItem(keyOf(id));
       if (backend.getItem(ACTIVE_KEY) === id) backend.removeItem(ACTIVE_KEY);
     },
@@ -172,6 +179,93 @@ export function createProfileStore(backend: KeyValueStore): ProfileStore {
       if (id === null) backend.removeItem(ACTIVE_KEY);
       else backend.setItem(ACTIVE_KEY, id);
     },
+  };
+}
+
+// Active-profile id is a DEVICE preference → always localStorage (guarded for SSR).
+function deviceGetActiveId(): string | null {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage.getItem(ACTIVE_KEY) : null;
+  } catch {
+    return null;
+  }
+}
+function deviceSetActiveId(id: string | null): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (id === null) localStorage.removeItem(ACTIVE_KEY);
+    else localStorage.setItem(ACTIVE_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Supabase table name + the row shape stored there. */
+const SUPABASE_TABLE = "profiles";
+interface ProfileRow {
+  id: string;
+  pseudo: string;
+  data: PlayerProfile;
+  updated_at: string;
+}
+
+/**
+ * Cloud ProfileStore backed by Supabase. Every network call is wrapped: on
+ * failure it LOGS and degrades gracefully (empty list / null / no-op) so the app
+ * never crashes if Supabase is unreachable. Active id stays a local device pref.
+ */
+export function supabaseBackend(url: string, anonKey: string): ProfileStore {
+  const client = createClient(url, anonKey);
+  const warn = (op: string, e: unknown) => console.warn(`[profiles] Supabase ${op} failed → degrading gracefully:`, e);
+
+  return {
+    async listProfiles() {
+      try {
+        const { data, error } = await client.from(SUPABASE_TABLE).select("data").order("updated_at", { ascending: false });
+        if (error) throw error;
+        return (data ?? [])
+          .map((row) => normalize((row as { data: unknown }).data))
+          .filter((p): p is PlayerProfile => p !== null);
+      } catch (e) {
+        warn("listProfiles", e);
+        return [];
+      }
+    },
+    async loadProfile(id) {
+      try {
+        const { data, error } = await client.from(SUPABASE_TABLE).select("data").eq("id", id).maybeSingle();
+        if (error) throw error;
+        return data ? normalize((data as { data: unknown }).data) : null;
+      } catch (e) {
+        warn("loadProfile", e);
+        return null;
+      }
+    },
+    async saveProfile(profile) {
+      try {
+        const row: ProfileRow = {
+          id: profile.id,
+          pseudo: profile.name,
+          data: profile,
+          updated_at: new Date(profile.updatedAt || Date.now()).toISOString(),
+        };
+        const { error } = await client.from(SUPABASE_TABLE).upsert(row, { onConflict: "id" });
+        if (error) throw error;
+      } catch (e) {
+        warn("saveProfile", e);
+      }
+    },
+    async deleteProfile(id) {
+      try {
+        const { error } = await client.from(SUPABASE_TABLE).delete().eq("id", id);
+        if (error) throw error;
+      } catch (e) {
+        warn("deleteProfile", e);
+      }
+      if (deviceGetActiveId() === id) deviceSetActiveId(null);
+    },
+    getActiveId: deviceGetActiveId,
+    setActiveId: deviceSetActiveId,
   };
 }
 
@@ -202,8 +296,27 @@ export function localStorageBackend(): KeyValueStore | null {
 }
 
 let defaultStore: ProfileStore | null = null;
-/** Process-wide store on the best available backend (localStorage → memory). */
+/**
+ * Process-wide store on the best available backend:
+ *   both Supabase env vars present → Supabase cloud (with graceful fallback),
+ *   otherwise → localStorage, then memory.
+ */
 export function defaultProfileStore(): ProfileStore {
-  if (!defaultStore) defaultStore = createProfileStore(localStorageBackend() ?? memoryBackend());
+  if (defaultStore) return defaultStore;
+
+  // NEXT_PUBLIC_* are inlined at build time by Next; undefined elsewhere (tests).
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (url && anonKey) {
+    try {
+      defaultStore = supabaseBackend(url, anonKey);
+      console.info("[profiles] backend: Supabase cloud");
+      return defaultStore;
+    } catch (e) {
+      console.warn("[profiles] Supabase init failed → localStorage fallback:", e);
+    }
+  }
+
+  defaultStore = createProfileStore(localStorageBackend() ?? memoryBackend());
   return defaultStore;
 }
