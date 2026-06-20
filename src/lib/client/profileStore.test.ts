@@ -4,10 +4,32 @@ import {
   type PlayerProfile,
 } from "./profileStore.js";
 import { emptyHumanStats, mergeHumanStats, readOf, type HumanStats } from "./humanModel.js";
+import { exploitPlan } from "./exploitBot.js";
+import type { Decision, DecisionView, OpponentView } from "@/bots/types.js";
 
 function mkStats(p: Partial<HumanStats> = {}): HumanStats {
   return { ...emptyHumanStats(), ...p };
 }
+
+/** A flop spot where a bot can fire and the human (seat 0) is still in the hand. */
+function botCanBetView(humanSeat = 0, botSeat = 3): DecisionView {
+  const opponents: OpponentView[] = [
+    { seat: humanSeat, position: "BB", stack: 200, committedThisStreet: 0, committedTotal: 0, folded: false, allIn: false },
+  ];
+  return {
+    handId: 0, seat: botSeat, street: "flop", position: "button",
+    holeCards: ["Ah", "Kd"], board: ["2c", "7d", "9s"],
+    pot: 30, toCall: 0, myStack: 200, oppStack: 200,
+    myCommittedThisStreet: 0, oppCommittedThisStreet: 0, bigBlind: 2,
+    legal: {
+      toAct: botSeat, toCall: 0, canFold: false, canCheck: true, canCall: false, callAmount: 0,
+      canBet: true, canRaise: false, aggressiveType: "bet", minTo: 2, maxTo: 200, minRaiseAmount: 2, maxRaiseAmount: 200,
+    },
+    actionHistory: [], tablePosition: "BTN", opponents, numPlayers: 2, activePlayers: 2,
+  };
+}
+
+const passiveBase: Decision = { action: { type: "check" }, perceivedEquity: 0.3 };
 
 describe("profileStore — create / read / update", () => {
   it("round-trips a profile through save → load", () => {
@@ -142,5 +164,58 @@ describe("humanModel — merge (lifetime base + session delta)", () => {
     const small: PlayerProfile["stats"] = mkStats({ hands: 3 });
     const big = mkStats({ hands: 12 });
     expect(readOf(small).weight).toBeLessThan(readOf(mergeHumanStats(small, big)).weight);
+  });
+});
+
+describe("full cycle — quit & return: lifetime + bot exploitation persist", () => {
+  const HUMAN = 0;
+
+  it("the RELOADED humanModel is still read by the exploitation layer", () => {
+    // Build a saved read of an over-folder (folds too much to c-bets).
+    const stats = mkStats({ hands: 40, foldToCbet: { n: 30, d: 40 } });
+    const reloadedRead = readOf(stats);
+    expect(reloadedRead.foldToCbet).toBeGreaterThan(0.55);
+    expect(reloadedRead.weight).toBe(1);
+
+    // The exploit layer turns a passive bot line into a bluff vs that read.
+    const plan = exploitPlan(botCanBetView(HUMAN), passiveBase, reloadedRead, HUMAN);
+    expect(plan.kind).toBe("bluff");
+    expect(plan.prob).toBeGreaterThan(0);
+  });
+
+  it("play → quit → return under the same pseudo keeps stats AND the bots' reads", () => {
+    const backend = memoryBackend(); // the device's localStorage, surviving sessions
+
+    // --- Session 1: play under "Baki" ---
+    const s1 = createProfileStore(backend);
+    let p = createProfile("Baki", { id: "a" });
+    s1.saveProfile(p);
+    s1.setActiveId("a");
+    // lifetime results accumulate…
+    p = { ...p, lifetime: accumulateHand(p.lifetime, { net: 20, bigBlind: 2 }) }; // win
+    p = { ...p, lifetime: accumulateHand(p.lifetime, { net: -5, bigBlind: 2 }) }; // loss
+    // …and so does the read the bots exploit (an over-folder).
+    p = { ...p, stats: mkStats({ hands: 40, foldToCbet: { n: 30, d: 40 } }) };
+    s1.saveProfile(p);
+
+    // While playing, the bots already exploit this leak.
+    expect(exploitPlan(botCanBetView(HUMAN), passiveBase, readOf(p.stats), HUMAN).kind).toBe("bluff");
+
+    // --- Quit (drop the store), then RETURN: a fresh store on the same device. ---
+    const s2 = createProfileStore(backend);
+    expect(s2.getActiveId()).toBe("a"); // remembers who was playing
+    const reloaded = s2.loadProfile(s2.getActiveId()!)!;
+
+    // Lifetime stats are intact — NOT reset.
+    expect(reloaded.name).toBe("Baki");
+    expect(reloaded.lifetime.handsPlayed).toBe(2);
+    expect(reloaded.lifetime.handsWon).toBe(1);
+    expect(reloaded.lifetime.netChips).toBe(15);
+    expect(lifetimeBb100(reloaded.lifetime)).toBeCloseTo(375, 5); // (15/2)/2*100
+
+    // The bots STILL exploit the reloaded read — explos survive the session.
+    const plan = exploitPlan(botCanBetView(HUMAN), passiveBase, readOf(reloaded.stats), HUMAN);
+    expect(plan.kind).toBe("bluff");
+    expect(plan.prob).toBeGreaterThan(0);
   });
 });
