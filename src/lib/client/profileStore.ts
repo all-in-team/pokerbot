@@ -14,6 +14,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { emptyHumanStats, type HumanStats } from "@/lib/client/humanModel.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/supabaseConfig.js";
 
 export interface ProfileLifetime {
   handsPlayed: number;
@@ -298,18 +299,16 @@ export function localStorageBackend(): KeyValueStore | null {
 let defaultStore: ProfileStore | null = null;
 /**
  * Process-wide store on the best available backend:
- *   both Supabase env vars present → Supabase cloud (with graceful fallback),
- *   otherwise → localStorage, then memory.
+ *   Supabase URL + key available (env var OR hard-coded public default) →
+ *   Supabase cloud (with graceful fallback); otherwise → localStorage, then memory.
  */
 export function defaultProfileStore(): ProfileStore {
   if (defaultStore) return defaultStore;
 
-  // NEXT_PUBLIC_* are inlined at build time by Next; undefined elsewhere (tests).
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (url && anonKey) {
+  // Env vars take priority; otherwise the public defaults in supabaseConfig.ts.
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
     try {
-      defaultStore = supabaseBackend(url, anonKey);
+      defaultStore = supabaseBackend(SUPABASE_URL, SUPABASE_ANON_KEY);
       console.info("[profiles] backend: Supabase cloud");
       return defaultStore;
     } catch (e) {
