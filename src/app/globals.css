@@ -167,11 +167,15 @@ body {
 .play-action-btn:focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; }
 .play-action-btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; transform: none; }
 
-/* Poker table aspect: wide on desktop, taller on narrow containers (more room
-   for the 6 seats). Driven by the table's own width (container query). */
+/* Poker table aspect: wide on desktop, taller (near-portrait) on narrow
+   containers so the hero's big cards + 6 seats fit without overlap. Driven by the
+   table's own width (container query). */
 .pt-table-aspect { aspect-ratio: 1.5 / 1; }
+@container (max-width: 700px) {
+  .pt-table-aspect { aspect-ratio: 1.1 / 1; }
+}
 @container (max-width: 460px) {
-  .pt-table-aspect { aspect-ratio: 1.18 / 1; }
+  .pt-table-aspect { aspect-ratio: 0.88 / 1; }
 }
 
 /* Hide the scrollbar on horizontally-scrollable strips (e.g. mobile nav). */

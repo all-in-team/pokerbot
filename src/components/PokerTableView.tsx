@@ -27,16 +27,22 @@ const SEAT_XY: Record<Position, { x: number; y: number }> = {
 };
 
 // Screen slots clockwise from the BOTTOM — used when a hero seat is pinned at
-// the bottom (e.g. /play). Slot 0 is the bottom (the human).
+// the bottom (e.g. /play). Slot 0 is the hero (bottom); the 5 opponents sit in
+// the upper arc so the hero's big cards own the bottom of the screen.
 const SLOTS: { x: number; y: number }[] = [
-  SEAT_XY.BB, SEAT_XY.UTG, SEAT_XY.HJ, SEAT_XY.CO, SEAT_XY.BTN, SEAT_XY.SB,
+  { x: 50, y: 86 }, // 0 hero (bottom-centre — big cards own the bottom)
+  { x: 13, y: 31 }, // 1 lower-left  (second row, side)
+  { x: 25, y: 9 }, //  2 upper-left  (top row)
+  { x: 50, y: 9 }, //  3 top-centre  (top row)
+  { x: 75, y: 9 }, //  4 upper-right (top row)
+  { x: 87, y: 31 }, // 5 lower-right (second row, side)
 ];
 
 const parseCard = (str: string) => ({ r: str.slice(0, -1), s: str.slice(-1) });
 
 const TAB: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
-type CardVariant = "board" | "seat" | "back";
+type CardVariant = "board" | "seat" | "back" | "hero";
 
 function Card({
   card,
@@ -53,9 +59,10 @@ function Card({
   // the table fits any container (mobile full-width or desktop column) without
   // overflowing or overlapping.
   const dims = {
-    board: { w: "min(54px, 8.4cqw)", r: "min(21px, 3.3cqw)", c: "min(30px, 4.7cqw)" },
-    seat: { w: "min(44px, 6.8cqw)", r: "min(18px, 2.8cqw)", c: "min(25px, 3.9cqw)" },
-    back: { w: "min(36px, 5.6cqw)", r: "0", c: "0" },
+    board: { w: "min(52px, 11cqw)", r: "min(20px, 4.3cqw)", c: "min(29px, 6.2cqw)" },
+    seat: { w: "min(34px, 7cqw)", r: "min(15px, 3cqw)", c: "min(21px, 4.3cqw)" },
+    back: { w: "min(26px, 5.4cqw)", r: "0", c: "0" },
+    hero: { w: "min(66px, 15cqw)", r: "min(25px, 5.6cqw)", c: "min(36px, 8cqw)" },
   }[variant];
 
   const base: React.CSSProperties = {
@@ -142,151 +149,155 @@ function Positioned({ xy, factor, z = 4, children }: { xy: { x: number; y: numbe
   );
 }
 
-function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number; y: number }; ante: number; reveal: boolean }) {
+function SeatPod({ seat, xy, reveal, isHero = false }: { seat: SeatFrame; xy: { x: number; y: number }; reveal: boolean; isHero?: boolean }) {
   const { x, y } = xy;
-  // Anchor each pod toward the table CENTRE (grow inward) so it never overflows an
-  // edge, however narrow the container is. Centre seats (x/y ≈ 50) stay centred.
-  const cx = x > 49 && x < 51;
-  const cy = y > 49 && y < 51;
-  const anchor: React.CSSProperties = {
-    ...(cx ? { left: "50%" } : x < 50 ? { left: `${x}%` } : { right: `${100 - x}%` }),
-    ...(cy ? { top: "50%" } : y < 50 ? { top: `${y}%` } : { bottom: `${100 - y}%` }),
-    transform: `translate(${cx ? "-50%" : "0"}, ${cy ? "-50%" : "0"})`,
-  };
-  // Dealer button sits OUTSIDE the pod on its inner side (toward the table centre),
-  // vertically centred → never over the cards / name / stack / position / bet.
-  const dealerSide: React.CSSProperties = x <= 50 ? { left: "calc(100% + 8px)" } : { right: "calc(100% + 8px)" };
   const hasCards = seat.cards.length === 2;
-  // Face up when this seat's cards are revealed (showdown) or a full reveal is on
-  // (study mode) — this is what turns FOLDED hands face-up at hand end too.
+  // Face up when this seat's cards are revealed (showdown / study full-reveal), or
+  // always for the hero. Folded hands stay face-up only when revealing.
   const faceUp = (seat.revealed || reveal) && hasCards;
-  // Render a card block for live seats (backs) and for any seat we're revealing.
   const showCardBlock = !seat.folded || (reveal && hasCards);
   const ring = seat.isWinner ? C.teal : seat.isActor ? C.teal : null;
   const winnerGlow = seat.isWinner;
+  const cardVariant: CardVariant = isHero ? "hero" : "seat";
+
+  // The hand: big for the hero, compact backs/faces for opponents.
+  const cardBlock = showCardBlock ? (
+    <div style={{ display: "flex", gap: isHero ? 6 : 3 }}>
+      {faceUp ? (
+        <>
+          <Card card={parseCard(seat.cards[0]!)} variant={cardVariant} />
+          <Card card={parseCard(seat.cards[1]!)} variant={cardVariant} />
+        </>
+      ) : (
+        <>
+          <Card variant="back" faceDown />
+          <Card variant="back" faceDown />
+        </>
+      )}
+    </div>
+  ) : null;
+
+  // Compact info plate (avatar + name/stack/position). Same for everyone.
+  const podBox = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "min(8px, 1.4cqw)",
+        padding: "min(6px,1.1cqw) min(11px,1.9cqw)",
+        borderRadius: 12,
+        background: C.surface,
+        border: ring ? `2px solid ${ring}` : `1px solid ${C.border}`,
+        boxShadow: winnerGlow
+          ? `0 0 0 4px ${C.teal}2e, 0 8px 22px rgba(0,0,0,0.5)`
+          : seat.isActor
+            ? `0 0 0 4px ${C.teal}1f, 0 6px 16px rgba(0,0,0,0.45)`
+            : "0 6px 16px rgba(0,0,0,0.4)",
+        transition: "box-shadow .18s ease, border-color .18s ease",
+      }}
+    >
+      <div
+        style={{
+          width: "min(30px, 5cqw)",
+          height: "min(30px, 5cqw)",
+          borderRadius: 9,
+          background: "#0E1117",
+          border: `1px solid ${C.border}`,
+          color: C.text,
+          display: "grid",
+          placeItems: "center",
+          fontWeight: 800,
+          fontSize: "min(13px, 2.3cqw)",
+          flex: "0 0 auto",
+        }}
+      >
+        {seat.name.replace(/[^0-9]/g, "") || seat.name[0]}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2, gap: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "min(12px, 2.1cqw)", color: C.text, fontWeight: 700 }}>
+          <span>{seat.name}</span>
+          <span
+            style={{
+              fontSize: "min(9px, 1.6cqw)",
+              fontWeight: 800,
+              letterSpacing: 0.5,
+              padding: "1px 5px",
+              borderRadius: 5,
+              color: "#0E1117",
+              background: posColor(seat.position),
+            }}
+          >
+            {seat.position}
+          </span>
+          {seat.allIn && !seat.folded && (
+            <span style={{ fontSize: "min(9px, 1.6cqw)", fontWeight: 800, color: "#F08A8A" }}>ALL-IN</span>
+          )}
+        </div>
+        <span style={{ ...TAB, fontSize: "min(12px, 2cqw)", color: seat.isWinner ? C.gold : C.text2, fontWeight: 600 }}>
+          {seat.folded ? "couché" : seat.stack}
+        </span>
+      </div>
+    </div>
+  );
+
+  const dealerSide: React.CSSProperties = x <= 50 ? { left: "calc(100% + 8px)" } : { right: "calc(100% + 8px)" };
+  const dealerBtn = seat.isButton ? (
+    <div
+      aria-label="bouton du donneur"
+      style={{
+        position: "absolute",
+        top: "50%",
+        transform: "translateY(-50%)",
+        ...dealerSide,
+        width: "min(28px, 4.4cqw)",
+        height: "min(28px, 4.4cqw)",
+        borderRadius: "50%",
+        background: "#F4F1E8",
+        color: "#0E1117",
+        fontWeight: 900,
+        fontSize: "min(14px, 2.3cqw)",
+        display: "grid",
+        placeItems: "center",
+        boxShadow: "0 3px 8px rgba(0,0,0,0.55)",
+        border: "1px solid rgba(0,0,0,0.25)",
+        zIndex: 7,
+      }}
+    >
+      D
+    </div>
+  ) : null;
+
+  // HERO: pinned to the bottom — big cards directly above the info plate, on top of
+  // everything else. OPPONENTS: anchored toward the centre so they never overflow.
+  const cxC = x > 49 && x < 51;
+  const cyC = y > 49 && y < 51;
+  const place: React.CSSProperties = isHero
+    ? { left: "50%", bottom: "2%", transform: "translateX(-50%)" }
+    : {
+        ...(cxC ? { left: "50%" } : x < 50 ? { left: `${x}%` } : { right: `${100 - x}%` }),
+        ...(cyC ? { top: "50%" } : y < 50 ? { top: `${y}%` } : { bottom: `${100 - y}%` }),
+        transform: `translate(${cxC ? "-50%" : "0"}, ${cyC ? "-50%" : "0"})`,
+      };
 
   return (
     <div
       style={{
         position: "absolute",
-        ...anchor,
+        ...place,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 5,
-        // Folded seats dim; when revealing (study), keep them legible (no grayscale).
+        gap: isHero ? "min(6px, 1.4cqw)" : 4,
         opacity: seat.folded ? (reveal ? 0.72 : 0.4) : 1,
         filter: seat.folded && !reveal ? "grayscale(1)" : "none",
         transition: "opacity .2s ease, filter .2s ease",
-        zIndex: seat.isActor || seat.isWinner ? 6 : 3,
+        zIndex: isHero ? 8 : seat.isActor || seat.isWinner ? 6 : 3,
         width: "max-content",
       }}
     >
-      {showCardBlock && (
-        <div style={{ display: "flex", gap: 4 }}>
-          {faceUp ? (
-            <>
-              <Card card={parseCard(seat.cards[0]!)} variant="seat" />
-              <Card card={parseCard(seat.cards[1]!)} variant="seat" />
-            </>
-          ) : (
-            <>
-              <Card variant="back" faceDown />
-              <Card variant="back" faceDown />
-            </>
-          )}
-        </div>
-      )}
-
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "min(8px, 1.4cqw)",
-          padding: "min(6px,1.1cqw) min(11px,1.9cqw)",
-          borderRadius: 12,
-          background: C.surface,
-          border: ring ? `2px solid ${ring}` : `1px solid ${C.border}`,
-          boxShadow: winnerGlow
-            ? `0 0 0 4px ${C.teal}2e, 0 8px 22px rgba(0,0,0,0.5)`
-            : seat.isActor
-              ? `0 0 0 4px ${C.teal}1f, 0 6px 16px rgba(0,0,0,0.45)`
-              : "0 6px 16px rgba(0,0,0,0.4)",
-          transition: "box-shadow .18s ease, border-color .18s ease",
-        }}
-      >
-        <div
-          style={{
-            width: "min(32px, 5cqw)",
-            height: "min(32px, 5cqw)",
-            borderRadius: 9,
-            background: "#0E1117",
-            border: `1px solid ${C.border}`,
-            color: C.text,
-            display: "grid",
-            placeItems: "center",
-            fontWeight: 800,
-            fontSize: "min(13px, 2.3cqw)",
-            flex: "0 0 auto",
-          }}
-        >
-          {seat.name.replace(/[^0-9]/g, "") || seat.name[0]}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.2, gap: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "min(12px, 2.1cqw)", color: C.text, fontWeight: 700 }}>
-            <span>{seat.name}</span>
-            <span
-              style={{
-                fontSize: "min(9px, 1.6cqw)",
-                fontWeight: 800,
-                letterSpacing: 0.5,
-                padding: "1px 5px",
-                borderRadius: 5,
-                color: "#0E1117",
-                background: posColor(seat.position),
-              }}
-            >
-              {seat.position}
-            </span>
-            {seat.allIn && !seat.folded && (
-              <span style={{ fontSize: "min(9px, 1.6cqw)", fontWeight: 800, color: "#F08A8A" }}>ALL-IN</span>
-            )}
-          </div>
-          <span style={{ ...TAB, fontSize: "min(12px, 2cqw)", color: seat.isWinner ? C.gold : C.text2, fontWeight: 600 }}>
-            {seat.folded ? "couché" : seat.stack}
-          </span>
-        </div>
-      </div>
-
-      {!seat.folded && ante > 0 && (
-        <span style={{ ...TAB, fontSize: "min(10px, 1.7cqw)", color: C.text3 }}>ante {ante}</span>
-      )}
-
-      {seat.isButton && (
-        <div
-          aria-label="bouton du donneur"
-          style={{
-            position: "absolute",
-            top: "50%",
-            transform: "translateY(-50%)",
-            ...dealerSide,
-            width: "min(28px, 4.4cqw)",
-            height: "min(28px, 4.4cqw)",
-            borderRadius: "50%",
-            background: "#F4F1E8",
-            color: "#0E1117",
-            fontWeight: 900,
-            fontSize: "min(14px, 2.3cqw)",
-            display: "grid",
-            placeItems: "center",
-            boxShadow: "0 3px 8px rgba(0,0,0,0.55)",
-            border: "1px solid rgba(0,0,0,0.25)",
-            zIndex: 7,
-          }}
-        >
-          D
-        </div>
-      )}
+      {cardBlock}
+      {podBox}
+      {dealerBtn}
     </div>
   );
 }
@@ -304,10 +315,17 @@ export default function PokerTableView({
   const board = state.board.map(parseCard);
   const climax = state.kind === "award";
   const n = state.seats.length;
+  const heroPinned = heroSeat != null;
   // Screen coords for a seat: pinned-to-hero layout if heroSeat is set, else
   // the position-label layout used by /watch.
   const xyOf = (seat: SeatFrame): { x: number; y: number } =>
-    heroSeat != null ? SLOTS[(((seat.seat - heroSeat) % n) + n) % n] ?? SEAT_XY[seat.position] : SEAT_XY[seat.position];
+    heroPinned ? SLOTS[(((seat.seat - heroSeat!) % n) + n) % n] ?? SEAT_XY[seat.position] : SEAT_XY[seat.position];
+  // Hero-pinned (poker-client) layout: pot sits just ABOVE the centred board, with
+  // the bottom of the table reserved for the hero's big cards.
+  const boardTop = heroPinned ? "57%" : "39%";
+  const potTop = heroPinned ? "42%" : "62%";
+  // Bet chips ride the line well toward the pot, clear of every pod.
+  const betFactor = heroPinned ? 0.62 : 0.42;
 
   return (
     <div
@@ -344,13 +362,13 @@ export default function PokerTableView({
           />
         </div>
 
-        {/* board */}
-        <div style={{ position: "absolute", left: "50%", top: "39%", transform: "translate(-50%, -50%)", display: "flex", gap: "min(8px, 1.3cqw)", zIndex: 2 }}>
+        {/* board (centred) */}
+        <div style={{ position: "absolute", left: "50%", top: boardTop, transform: "translate(-50%, -50%)", display: "flex", gap: "min(8px, 1.3cqw)", zIndex: 2 }}>
           {[0, 1, 2, 3, 4].map((i) => (board[i] ? <Card key={i} card={board[i]} variant="board" /> : <Card key={i} variant="board" ghost />))}
         </div>
 
-        {/* pot */}
-        <div style={{ position: "absolute", left: "50%", top: "62%", transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 2 }}>
+        {/* pot (above the board) */}
+        <div style={{ position: "absolute", left: "50%", top: potTop, transform: "translate(-50%, -50%)", textAlign: "center", zIndex: 2 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "min(8px, 1.5cqw)" }}>
             <span style={{ width: "min(14px, 2.6cqw)", height: "min(14px, 2.6cqw)", borderRadius: "50%", background: C.gold, boxShadow: "inset 0 0 0 2px rgba(0,0,0,0.3)" }} />
             <div style={{ textAlign: "left", lineHeight: 1 }}>
@@ -367,14 +385,14 @@ export default function PokerTableView({
 
         {/* seats */}
         {state.seats.map((s) => (
-          <SeatPod key={s.seat} seat={s} xy={xyOf(s)} ante={state.ante} reveal={revealAll} />
+          <SeatPod key={s.seat} seat={s} xy={xyOf(s)} reveal={revealAll} isHero={heroPinned && s.seat === heroSeat} />
         ))}
 
-        {/* bet chips on the bet line (never on the cards) */}
+        {/* bet chips on the bet line (never on the cards / pods) */}
         {state.seats
           .filter((s) => s.bet > 0 && !s.folded)
           .map((s) => (
-            <Positioned key={`bet-${s.seat}`} xy={xyOf(s)} factor={0.42}>
+            <Positioned key={`bet-${s.seat}`} xy={xyOf(s)} factor={betFactor}>
               <BetChip amount={s.bet} />
             </Positioned>
           ))}
