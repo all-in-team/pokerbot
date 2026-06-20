@@ -14,6 +14,7 @@ import { buildView } from "@/sim/match.js";
 import { createHeuristicBot } from "@/bots/heuristic.js";
 import { createExploitBot } from "@/lib/client/exploitBot.js";
 import { EMPTY_READ, type HumanRead } from "@/lib/client/humanModel.js";
+import { randomSeed } from "@/lib/client/randomSeed.js";
 import type { Bot } from "@/bots/types.js";
 import type { Frame, PotView, SeatFrame } from "@/lib/client/replayMultiway.js";
 
@@ -46,7 +47,8 @@ export interface PlayTable {
 export function createPlayTable(opts: PlayConfig = {}): PlayTable {
   const seats = opts.seats ?? 6;
   const heroSeat = opts.heroSeat ?? 0;
-  const seed = opts.seed ?? "play";
+  // Explicit seed (tests/replay) → deterministic; omitted (real play) → fresh random.
+  const seed = opts.seed ?? randomSeed("play");
   const getRead = opts.getRead ?? (() => EMPTY_READ);
   let botNo = 0;
   const bots: (Bot | null)[] = Array.from({ length: seats }, (_, i) => {

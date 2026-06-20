@@ -44,7 +44,8 @@ export default function PlayPage() {
   const profileBaseRef = useRef<HumanStats>(emptyHumanStats()); // lifetime model at session start
   const sessionStatsRef = useRef<HumanStats>(emptyHumanStats()); // this session's delta
   const profileRef = useRef<PlayerProfile | null>(null);
-  const tableRef = useRef<PlayTable>(createPlayTable({ heroSeat: HERO, seed: "play", getRead: () => readOf(mergeHumanStats(profileBaseRef.current, sessionStatsRef.current)) }));
+  // No seed → a fresh random shuffle every session (different boards each time).
+  const tableRef = useRef<PlayTable>(createPlayTable({ heroSeat: HERO, getRead: () => readOf(mergeHumanStats(profileBaseRef.current, sessionStatsRef.current)) }));
   const stacksRef = useRef<number[]>(Array.from({ length: tableRef.current.seats }, () => tableRef.current.startingStack));
   const buttonRef = useRef(0);
   const handIdRef = useRef(0);

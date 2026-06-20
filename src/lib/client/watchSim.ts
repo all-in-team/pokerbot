@@ -9,6 +9,7 @@
 
 import { playHand, playRingSession, type HandLog } from "@/sim/match.js";
 import { createHeuristicBot } from "@/bots/heuristic.js";
+import { randomSeed } from "@/lib/client/randomSeed.js";
 import type { Bot } from "@/bots/types.js";
 import type { Seat } from "@/engine/state.js";
 
@@ -41,7 +42,8 @@ export interface WatchTableOptions {
 /** Seat N heuristic bots with rotating personalities. */
 export function createWatchTable(opts: WatchTableOptions = {}): WatchTable {
   const seats = Math.max(2, Math.min(6, opts.seats ?? 6));
-  const seed = opts.seed ?? "watch";
+  // Explicit seed (tests/replay) → deterministic; omitted (real play) → fresh random.
+  const seed = opts.seed ?? randomSeed("watch");
   const bots: Bot[] = Array.from({ length: seats }, (_, i) =>
     createHeuristicBot({ name: `Bot ${i + 1}`, style: "EV", seed: `${seed}:bot${i}`, ...EV_BRAIN }),
   );

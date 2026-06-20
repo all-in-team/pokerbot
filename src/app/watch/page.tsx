@@ -15,7 +15,8 @@ import { TopNav } from "@/components/TopNav.js";
 import { THEME as C } from "@/lib/theme.js";
 
 export default function WatchPage() {
-  const tableRef = useRef(createWatchTable({ seats: 6, seed: "watch" }));
+  // No seed → a fresh random shuffle every session (different boards each time).
+  const tableRef = useRef(createWatchTable({ seats: 6 }));
   const stateRef = useRef(initialWatchState(tableRef.current));
   const started = useRef(false);
 
