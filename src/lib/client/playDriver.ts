@@ -54,7 +54,7 @@ export function createPlayTable(opts: PlayConfig = {}): PlayTable {
     botNo += 1;
     // Heuristic baseline, wrapped with the exploitative layer (no-op until the
     // read has confidence). BotBrain stays pluggable.
-    const base = createHeuristicBot({ name: `Bot ${botNo}`, style: "EV", seed: `${seed}:bot${i}`, ...EV_BRAIN });
+    const base = createHeuristicBot({ name: `Bot ${botNo}`, style: "EV", seed: `${seed}:bot${i}`, equitySamples: 240, ...EV_BRAIN });
     return createExploitBot({ base, seed: `${seed}:bot${i}`, getRead, humanSeat: heroSeat });
   });
   return {

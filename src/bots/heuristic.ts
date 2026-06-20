@@ -15,7 +15,11 @@ import { createRng, type Rng } from "../engine/rng.js";
 import type { ActionInput } from "../engine/actions.js";
 import { lookupPreflop, sampleAction, type PreflopLookupResult } from "../lib/preflop/preflopLookup.js";
 import { clampToLegal, sizeToFromPotFraction } from "./util.js";
+import { equityEvDecide } from "./equityEval.js";
 import type { Bot, Decision, DecisionView, TablePosition } from "./types.js";
+
+/** Default Monte Carlo iterations per postflop decision (overridable per bot). */
+const DEFAULT_EQUITY_SAMPLES = 80;
 
 /**
  * Positional looseness, 0 (earliest, tightest) … 1 (button, loosest). Heads-up
@@ -45,6 +49,8 @@ export interface HeuristicConfig {
   bluffFreq: number;
   /** Seed for this bot's randomness (keeps self-play deterministic). */
   seed: string;
+  /** Monte Carlo iterations per postflop equity/EV decision. Default 80. */
+  equitySamples?: number;
 }
 
 /** Chen-formula starting-hand score, normalized to roughly 0..1. */
@@ -130,14 +136,23 @@ export function createHeuristicBot(config: HeuristicConfig): Bot {
     };
   }
 
+  const equitySamples = config.equitySamples ?? DEFAULT_EQUITY_SAMPLES;
+
   function decide(view: DecisionView): Decision {
-    // Preflop is range-table-driven when a seeded scenario covers the spot;
-    // otherwise (and always postflop) we fall back to the labelled heuristic.
+    // Preflop stays table-driven (range tables); uncovered preflop spots fall back
+    // to the labelled heuristic.
     if (view.street === "preflop") {
       const lk = lookupPreflop(view);
       if (lk) return decideFromRange(lk, view);
+      return heuristicDecide(view);
     }
-    return heuristicDecide(view);
+    // Postflop: equity/EV policy vs the opponents' assumed continuation range.
+    // The made-hand heuristic remains a safety fallback (still labelled "heuristic").
+    try {
+      return equityEvDecide(view, { aggression: config.aggression, bluffFreq: config.bluffFreq, samples: equitySamples }, rng);
+    } catch {
+      return heuristicDecide(view);
+    }
   }
 
   // Postflop + uncovered-preflop fallback: the existing approx heuristic.

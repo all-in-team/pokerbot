@@ -58,8 +58,11 @@ export interface DecisionView {
   activePlayers?: number;
 }
 
-/** Where a decision came from. Preflop table ("approx"/"solver") or the fallback. */
-export type DecisionSource = "approx" | "solver" | "heuristic";
+/**
+ * Where a decision came from: a preflop range table ("approx"/"solver"), the
+ * postflop equity/EV policy ("equity-EV"), or the "heuristic" fallback.
+ */
+export type DecisionSource = "approx" | "solver" | "heuristic" | "equity-EV";
 
 export interface Decision {
   action: ActionInput;
