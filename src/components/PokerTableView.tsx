@@ -26,21 +26,67 @@ const SEAT_XY: Record<Position, { x: number; y: number }> = {
   SB: { x: 91, y: 64 },
 };
 
-// Screen slots clockwise from the BOTTOM — used when a hero seat is pinned at
-// the bottom (e.g. /play). Slot 0 is the hero (bottom); the 5 opponents sit in
-// the upper arc so the hero's big cards own the bottom of the screen.
-const SLOTS: { x: number; y: number }[] = [
-  { x: 50, y: 86 }, // 0 hero (bottom-centre — big cards own the bottom)
+// Screen slots when a hero seat is pinned at the bottom (e.g. /play). Slot 0 is
+// the hero; slots 1..5 are the opponents clockwise. TWO layouts:
+//  - MOBILE: a compact arc with the 5 opponents clustered at the top, so the
+//    hero's big cards own the bottom of a narrow, near-portrait table.
+//  - DESKTOP: a classic WIDE oval with the 6 players spread evenly around the
+//    whole perimeter, using the horizontal space.
+const SLOTS_MOBILE: { x: number; y: number }[] = [
+  { x: 50, y: 86 }, // 0 hero (bottom-centre)
   { x: 13, y: 31 }, // 1 lower-left  (second row, side)
   { x: 25, y: 9 }, //  2 upper-left  (top row)
   { x: 50, y: 9 }, //  3 top-centre  (top row)
   { x: 75, y: 9 }, //  4 upper-right (top row)
   { x: 87, y: 31 }, // 5 lower-right (second row, side)
 ];
+const SLOTS_DESKTOP: { x: number; y: number }[] = [
+  { x: 50, y: 87 }, // 0 hero (bottom-centre)
+  { x: 13, y: 70 }, // 1 lower-left
+  { x: 10, y: 32 }, // 2 upper-left
+  { x: 50, y: 13 }, // 3 top-centre
+  { x: 90, y: 32 }, // 4 upper-right
+  { x: 87, y: 70 }, // 5 lower-right
+];
 
 const parseCard = (str: string) => ({ r: str.slice(0, -1), s: str.slice(-1) });
 
 const TAB: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
+
+/** True on wide (lg+) screens — switches /play between desktop oval and mobile arc. */
+function useIsWide(minPx = 1024): boolean {
+  const read = () =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(`(min-width:${minPx}px)`).matches
+      : true; // default to desktop (SSR / no matchMedia)
+  const [wide, setWide] = React.useState<boolean>(read);
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia(`(min-width:${minPx}px)`);
+    const on = () => setWide(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [minPx]);
+  return wide;
+}
+
+/**
+ * Absolute placement for a seat. The hero is pinned bottom-centre (both layouts).
+ * On desktop, opponents are CENTRED on their oval point (room to spare); on mobile
+ * they're ANCHORED toward the centre so a compact table never overflows an edge.
+ */
+function seatPlacement(x: number, y: number, isWide: boolean, isHero: boolean): React.CSSProperties {
+  if (isHero) return { left: "50%", bottom: isWide ? "4%" : "2%", transform: "translateX(-50%)" };
+  if (isWide) return { left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" };
+  const cxC = x > 49 && x < 51;
+  const cyC = y > 49 && y < 51;
+  return {
+    ...(cxC ? { left: "50%" } : x < 50 ? { left: `${x}%` } : { right: `${100 - x}%` }),
+    ...(cyC ? { top: "50%" } : y < 50 ? { top: `${y}%` } : { bottom: `${100 - y}%` }),
+    transform: `translate(${cxC ? "-50%" : "0"}, ${cyC ? "-50%" : "0"})`,
+  };
+}
 
 type CardVariant = "board" | "seat" | "back" | "hero";
 
@@ -149,8 +195,7 @@ function Positioned({ xy, factor, z = 4, children }: { xy: { x: number; y: numbe
   );
 }
 
-function SeatPod({ seat, xy, reveal, isHero = false }: { seat: SeatFrame; xy: { x: number; y: number }; reveal: boolean; isHero?: boolean }) {
-  const { x, y } = xy;
+function SeatPod({ seat, seatX, posStyle, reveal, isHero = false }: { seat: SeatFrame; seatX: number; posStyle: React.CSSProperties; reveal: boolean; isHero?: boolean }) {
   const hasCards = seat.cards.length === 2;
   // Face up when this seat's cards are revealed (showdown / study full-reveal), or
   // always for the hero. Folded hands stay face-up only when revealing.
@@ -240,7 +285,7 @@ function SeatPod({ seat, xy, reveal, isHero = false }: { seat: SeatFrame; xy: { 
     </div>
   );
 
-  const dealerSide: React.CSSProperties = x <= 50 ? { left: "calc(100% + 8px)" } : { right: "calc(100% + 8px)" };
+  const dealerSide: React.CSSProperties = seatX <= 50 ? { left: "calc(100% + 8px)" } : { right: "calc(100% + 8px)" };
   const dealerBtn = seat.isButton ? (
     <div
       aria-label="bouton du donneur"
@@ -267,23 +312,11 @@ function SeatPod({ seat, xy, reveal, isHero = false }: { seat: SeatFrame; xy: { 
     </div>
   ) : null;
 
-  // HERO: pinned to the bottom — big cards directly above the info plate, on top of
-  // everything else. OPPONENTS: anchored toward the centre so they never overflow.
-  const cxC = x > 49 && x < 51;
-  const cyC = y > 49 && y < 51;
-  const place: React.CSSProperties = isHero
-    ? { left: "50%", bottom: "2%", transform: "translateX(-50%)" }
-    : {
-        ...(cxC ? { left: "50%" } : x < 50 ? { left: `${x}%` } : { right: `${100 - x}%` }),
-        ...(cyC ? { top: "50%" } : y < 50 ? { top: `${y}%` } : { bottom: `${100 - y}%` }),
-        transform: `translate(${cxC ? "-50%" : "0"}, ${cyC ? "-50%" : "0"})`,
-      };
-
   return (
     <div
       style={{
         position: "absolute",
-        ...place,
+        ...posStyle,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -316,16 +349,17 @@ export default function PokerTableView({
   const climax = state.kind === "award";
   const n = state.seats.length;
   const heroPinned = heroSeat != null;
-  // Screen coords for a seat: pinned-to-hero layout if heroSeat is set, else
-  // the position-label layout used by /watch.
+  const isWide = useIsWide();
+  // Hero-pinned uses two distinct layouts; /watch keeps its position-label oval.
+  const SLOTS = isWide ? SLOTS_DESKTOP : SLOTS_MOBILE;
   const xyOf = (seat: SeatFrame): { x: number; y: number } =>
     heroPinned ? SLOTS[(((seat.seat - heroSeat!) % n) + n) % n] ?? SEAT_XY[seat.position] : SEAT_XY[seat.position];
-  // Hero-pinned (poker-client) layout: pot sits just ABOVE the centred board, with
-  // the bottom of the table reserved for the hero's big cards.
-  const boardTop = heroPinned ? "57%" : "39%";
-  const potTop = heroPinned ? "42%" : "62%";
-  // Bet chips ride the line well toward the pot, clear of every pod.
-  const betFactor = heroPinned ? 0.62 : 0.42;
+  // Pot sits just ABOVE the centred board; bottom reserved for the hero's cards.
+  const boardTop = heroPinned ? (isWide ? "50%" : "57%") : "39%";
+  const potTop = heroPinned ? (isWide ? "34%" : "42%") : "62%";
+  const betFactor = heroPinned ? (isWide ? 0.42 : 0.62) : 0.42;
+  // Wide oval on desktop, near-portrait on mobile (room for the hero's big cards).
+  const aspectStyle: React.CSSProperties = heroPinned ? { aspectRatio: isWide ? "1.6 / 1" : "0.85 / 1" } : {};
 
   return (
     <div
@@ -346,8 +380,9 @@ export default function PokerTableView({
     >
       <style>{`@media (prefers-reduced-motion: reduce){ .watch-table *{ transition:none !important; } }`}</style>
 
-      {/* Taller (more square) on narrow containers so 6 seats have vertical room. */}
-      <div className="pt-table-aspect" style={{ position: "relative", width: "100%", margin: "0 auto" }}>
+      {/* Wide oval on desktop, near-portrait on mobile (hero-pinned); /watch keeps
+          its container-query aspect via the class. */}
+      <div className="pt-table-aspect" style={{ position: "relative", width: "100%", margin: "0 auto", ...aspectStyle }}>
         {/* rail + refined felt */}
         <div style={{ position: "absolute", inset: "6%", borderRadius: "50% / 50%", background: "#0E1117", padding: "clamp(7px,2vw,13px)", boxShadow: "0 24px 50px rgba(0,0,0,0.6)" }}>
           <div
@@ -384,18 +419,27 @@ export default function PokerTableView({
         </div>
 
         {/* seats */}
-        {state.seats.map((s) => (
-          <SeatPod key={s.seat} seat={s} xy={xyOf(s)} reveal={revealAll} isHero={heroPinned && s.seat === heroSeat} />
-        ))}
+        {state.seats.map((s) => {
+          const hero = heroPinned && s.seat === heroSeat;
+          const xy = xyOf(s);
+          return (
+            <SeatPod key={s.seat} seat={s} seatX={xy.x} posStyle={seatPlacement(xy.x, xy.y, isWide, hero)} reveal={revealAll} isHero={hero} />
+          );
+        })}
 
         {/* bet chips on the bet line (never on the cards / pods) */}
         {state.seats
           .filter((s) => s.bet > 0 && !s.folded)
-          .map((s) => (
-            <Positioned key={`bet-${s.seat}`} xy={xyOf(s)} factor={betFactor}>
-              <BetChip amount={s.bet} />
-            </Positioned>
-          ))}
+          .map((s) => {
+            const hero = heroPinned && s.seat === heroSeat;
+            // Hero chip sits just above the hero's big cards; others ride their line.
+            const chipXy = hero ? { x: 50, y: isWide ? 62 : 60 } : xyOf(s);
+            return (
+              <Positioned key={`bet-${s.seat}`} xy={chipXy} factor={hero ? 0 : betFactor}>
+                <BetChip amount={s.bet} />
+              </Positioned>
+            );
+          })}
       </div>
     </div>
   );
