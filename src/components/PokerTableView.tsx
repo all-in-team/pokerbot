@@ -88,7 +88,7 @@ function seatPlacement(x: number, y: number, isWide: boolean, isHero: boolean): 
   };
 }
 
-type CardVariant = "board" | "seat" | "back" | "hero";
+type CardVariant = "board" | "seat" | "back" | "hero" | "heroLg";
 
 function Card({
   card,
@@ -108,7 +108,9 @@ function Card({
     board: { w: "min(52px, 11cqw)", r: "min(20px, 4.3cqw)", c: "min(29px, 6.2cqw)" },
     seat: { w: "min(34px, 7cqw)", r: "min(15px, 3cqw)", c: "min(21px, 4.3cqw)" },
     back: { w: "min(26px, 5.4cqw)", r: "0", c: "0" },
+    // hero = giant (mobile only); heroLg = desktop hero ≈ board size (~+12%).
     hero: { w: "min(66px, 15cqw)", r: "min(25px, 5.6cqw)", c: "min(36px, 8cqw)" },
+    heroLg: { w: "min(58px, 12cqw)", r: "min(22px, 4.7cqw)", c: "min(32px, 6.8cqw)" },
   }[variant];
 
   const base: React.CSSProperties = {
@@ -195,7 +197,7 @@ function Positioned({ xy, factor, z = 4, children }: { xy: { x: number; y: numbe
   );
 }
 
-function SeatPod({ seat, seatX, posStyle, reveal, isHero = false }: { seat: SeatFrame; seatX: number; posStyle: React.CSSProperties; reveal: boolean; isHero?: boolean }) {
+function SeatPod({ seat, seatX, posStyle, reveal, isHero = false, isWide = false }: { seat: SeatFrame; seatX: number; posStyle: React.CSSProperties; reveal: boolean; isHero?: boolean; isWide?: boolean }) {
   const hasCards = seat.cards.length === 2;
   // Face up when this seat's cards are revealed (showdown / study full-reveal), or
   // always for the hero. Folded hands stay face-up only when revealing.
@@ -203,7 +205,8 @@ function SeatPod({ seat, seatX, posStyle, reveal, isHero = false }: { seat: Seat
   const showCardBlock = !seat.folded || (reveal && hasCards);
   const ring = seat.isWinner ? C.teal : seat.isActor ? C.teal : null;
   const winnerGlow = seat.isWinner;
-  const cardVariant: CardVariant = isHero ? "hero" : "seat";
+  // Hero: giant cards on mobile, board-sized on desktop. Opponents: compact.
+  const cardVariant: CardVariant = isHero ? (isWide ? "heroLg" : "hero") : "seat";
 
   // The hand: big for the hero, compact backs/faces for opponents.
   const cardBlock = showCardBlock ? (
@@ -423,19 +426,19 @@ export default function PokerTableView({
           const hero = heroPinned && s.seat === heroSeat;
           const xy = xyOf(s);
           return (
-            <SeatPod key={s.seat} seat={s} seatX={xy.x} posStyle={seatPlacement(xy.x, xy.y, isWide, hero)} reveal={revealAll} isHero={hero} />
+            <SeatPod key={s.seat} seat={s} seatX={xy.x} posStyle={seatPlacement(xy.x, xy.y, isWide, hero)} reveal={revealAll} isHero={hero} isWide={isWide} />
           );
         })}
 
-        {/* bet chips on the bet line (never on the cards / pods) */}
+        {/* bet chips on the bet line (a dedicated spot per seat, never on the cards) */}
         {state.seats
           .filter((s) => s.bet > 0 && !s.folded)
           .map((s) => {
             const hero = heroPinned && s.seat === heroSeat;
-            // Hero chip sits just above the hero's big cards; others ride their line.
-            const chipXy = hero ? { x: 50, y: isWide ? 62 : 60 } : xyOf(s);
+            // Hero chip sits in the gap between the board and the hero's cards.
+            const chipXy = hero ? { x: 50, y: isWide ? 62 : 66 } : xyOf(s);
             return (
-              <Positioned key={`bet-${s.seat}`} xy={chipXy} factor={hero ? 0 : betFactor}>
+              <Positioned key={`bet-${s.seat}`} xy={chipXy} factor={hero ? 0 : betFactor} z={hero ? 9 : 5}>
                 <BetChip amount={s.bet} />
               </Positioned>
             );
