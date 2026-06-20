@@ -125,11 +125,11 @@ describe("equityEvDecide — max-EV decisions", () => {
   });
 });
 
-describe("integration — heuristic bot labels postflop equity-EV", () => {
-  it("uses the equity/EV policy postflop (source = equity-EV)", async () => {
+describe("integration — heuristic bot now runs the unified EV engine", () => {
+  it("labels decisions from the EV engine (source = ev)", async () => {
     const bot = createHeuristicBot({ name: "EV", seed: "b", tightness: 0.6, aggression: 0.6, bluffFreq: 0.15, equitySamples: 200 });
     const d = await bot.decide(mkView({ holeCards: ["Ah", "As"], board: ["2h", "7d", "Kc"] }));
-    expect(d.source).toBe("equity-EV");
+    expect(d.source).toBe("ev");
   });
 });
 
@@ -152,12 +152,12 @@ describe("exploitation layer sits ON TOP of equity-EV", () => {
     expect(plan.prob).toBeGreaterThan(0);
   });
 
-  it("the wrapped bot still returns a legal action and preserves the equity-EV source", async () => {
+  it("the legacy exploit wrapper still returns a legal action and preserves the base source", async () => {
     const base = createHeuristicBot({ name: "EV", seed: "b", tightness: 0.6, aggression: 0.6, bluffFreq: 0.15, equitySamples: 150 });
     const wrapped = createExploitBot({ base, seed: "b", getRead: () => read({ foldToCbet: 0.7 }), humanSeat: HUMAN });
     const view = mkView({ holeCards: ["Ah", "As"], board: ["2h", "7d", "Kc"] });
     const d = await wrapped.decide(view);
     expect(["bet", "check", "call", "raise", "fold"]).toContain(d.action.type);
-    expect(d.source).toBe("equity-EV");
+    expect(d.source).toBe("ev");
   });
 });

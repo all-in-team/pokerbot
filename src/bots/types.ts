@@ -59,10 +59,11 @@ export interface DecisionView {
 }
 
 /**
- * Where a decision came from: a preflop range table ("approx"/"solver"), the
- * postflop equity/EV policy ("equity-EV"), or the "heuristic" fallback.
+ * Where a decision came from: the unified EV engine ("ev"), a preflop range table
+ * ("approx"/"solver"), the legacy postflop policy ("equity-EV"), or the
+ * "heuristic" fallback.
  */
-export type DecisionSource = "approx" | "solver" | "heuristic" | "equity-EV";
+export type DecisionSource = "ev" | "approx" | "solver" | "heuristic" | "equity-EV";
 
 export interface Decision {
   action: ActionInput;

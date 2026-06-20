@@ -15,10 +15,12 @@ import { createRng, type Rng } from "../engine/rng.js";
 import type { ActionInput } from "../engine/actions.js";
 import { lookupPreflop, sampleAction, type PreflopLookupResult } from "../lib/preflop/preflopLookup.js";
 import { clampToLegal, sizeToFromPotFraction } from "./util.js";
-import { equityEvDecide } from "./equityEval.js";
+import { decideEV } from "./evEngine.js";
 import type { Bot, Decision, DecisionView, TablePosition } from "./types.js";
+import type { Seat } from "../engine/state.js";
+import type { HumanRead } from "../lib/client/humanModel.js";
 
-/** Default Monte Carlo iterations per postflop decision (overridable per bot). */
+/** Default Monte Carlo iterations per EV decision (overridable per bot). */
 const DEFAULT_EQUITY_SAMPLES = 80;
 
 /**
@@ -49,8 +51,11 @@ export interface HeuristicConfig {
   bluffFreq: number;
   /** Seed for this bot's randomness (keeps self-play deterministic). */
   seed: string;
-  /** Monte Carlo iterations per postflop equity/EV decision. Default 80. */
+  /** Monte Carlo iterations per EV decision. Default 80. */
   equitySamples?: number;
+  /** Live human read + seat, for range-skew exploitation in the EV engine. */
+  getRead?: () => HumanRead;
+  humanSeat?: Seat;
 }
 
 /** Chen-formula starting-hand score, normalized to roughly 0..1. */
@@ -138,19 +143,24 @@ export function createHeuristicBot(config: HeuristicConfig): Bot {
 
   const equitySamples = config.equitySamples ?? DEFAULT_EQUITY_SAMPLES;
 
+  // UNIFIED EV ENGINE — the single decider on every street. Equity/EV/odds come
+  // from the engine; ranges are the only assumption; exploitation skews ranges.
+  // The legacy preflop table + made-hand heuristic stay as a safety fallback only.
   function decide(view: DecisionView): Decision {
-    // Preflop stays table-driven (range tables); uncovered preflop spots fall back
-    // to the labelled heuristic.
-    if (view.street === "preflop") {
-      const lk = lookupPreflop(view);
-      if (lk) return decideFromRange(lk, view);
-      return heuristicDecide(view);
-    }
-    // Postflop: equity/EV policy vs the opponents' assumed continuation range.
-    // The made-hand heuristic remains a safety fallback (still labelled "heuristic").
     try {
-      return equityEvDecide(view, { aggression: config.aggression, bluffFreq: config.bluffFreq, samples: equitySamples }, rng);
+      return decideEV(view, {
+        seed: config.seed,
+        evSamples: equitySamples,
+        getRead: config.getRead,
+        humanSeat: config.humanSeat,
+        mix: config.aggression,
+      }, rng);
     } catch {
+      // Never crash: fall back to the labelled legacy logic (still always legal).
+      if (view.street === "preflop") {
+        const lk = lookupPreflop(view);
+        if (lk) return decideFromRange(lk, view);
+      }
       return heuristicDecide(view);
     }
   }

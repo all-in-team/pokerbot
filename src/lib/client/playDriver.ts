@@ -12,7 +12,6 @@ import { pot as potOf, type AtLeastTwo, type GameState, type Seat } from "@/engi
 import type { ActionInput, LegalActions } from "@/engine/actions.js";
 import { buildView } from "@/sim/match.js";
 import { createHeuristicBot } from "@/bots/heuristic.js";
-import { createExploitBot } from "@/lib/client/exploitBot.js";
 import { EMPTY_READ, type HumanRead } from "@/lib/client/humanModel.js";
 import { randomSeed } from "@/lib/client/randomSeed.js";
 import type { Bot } from "@/bots/types.js";
@@ -54,10 +53,17 @@ export function createPlayTable(opts: PlayConfig = {}): PlayTable {
   const bots: (Bot | null)[] = Array.from({ length: seats }, (_, i) => {
     if (i === heroSeat) return null;
     botNo += 1;
-    // Heuristic baseline, wrapped with the exploitative layer (no-op until the
-    // read has confidence). BotBrain stays pluggable.
-    const base = createHeuristicBot({ name: `Bot ${botNo}`, style: "EV", seed: `${seed}:bot${i}`, equitySamples: 240, ...EV_BRAIN });
-    return createExploitBot({ base, seed: `${seed}:bot${i}`, getRead, humanSeat: heroSeat });
+    // Unified EV brain. Exploitation is built in: it skews the human's assumed
+    // range (via getRead) before the EV maths — no separate deviation layer.
+    return createHeuristicBot({
+      name: `Bot ${botNo}`,
+      style: "EV",
+      seed: `${seed}:bot${i}`,
+      equitySamples: 240,
+      getRead,
+      humanSeat: heroSeat,
+      ...EV_BRAIN,
+    });
   });
   return {
     bots,
