@@ -83,6 +83,9 @@ function Card({
   }
 
   const suit = SUITS[card.s]!;
+  // Force TEXT (not emoji) presentation so the 4-colour scheme is respected and no
+  // suit renders as a coloured square / broken glyph.
+  const glyph = `${suit.glyph}\uFE0E`;
   return (
     <div
       role="img"
@@ -99,11 +102,10 @@ function Card({
         userSelect: "none",
       }}
     >
-      <div style={{ position: "absolute", top: "7%", left: "9%", display: "flex", flexDirection: "column", alignItems: "center", fontSize: dims.r }}>
-        <span>{card.r}</span>
-        <span style={{ fontSize: "0.74em", marginTop: "-0.04em" }}>{suit.glyph}</span>
-      </div>
-      <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: dims.c, opacity: 0.94 }}>{suit.glyph}</div>
+      {/* Corner index: rank only — the single suit pip lives in the centre (no duplicate). */}
+      <span style={{ position: "absolute", top: "6%", left: "9%", fontSize: dims.r }}>{card.r}</span>
+      {/* One clean, clearly-coloured suit pip. */}
+      <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: dims.c }}>{glyph}</div>
     </div>
   );
 }
@@ -139,6 +141,9 @@ function Positioned({ xy, factor, z = 4, children }: { xy: { x: number; y: numbe
 
 function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number; y: number }; ante: number; reveal: boolean }) {
   const { x, y } = xy;
+  // Dealer button sits OUTSIDE the pod on its inner side (toward the table centre),
+  // vertically centred → never over the cards / name / stack / position / bet.
+  const dealerSide: React.CSSProperties = x <= 50 ? { left: "calc(100% + 8px)" } : { right: "calc(100% + 8px)" };
   const hasCards = seat.cards.length === 2;
   // Face up when this seat's cards are revealed (showdown) or a full reveal is on
   // (study mode) — this is what turns FOLDED hands face-up at hand end too.
@@ -246,6 +251,32 @@ function SeatPod({ seat, xy, ante, reveal }: { seat: SeatFrame; xy: { x: number;
       {!seat.folded && ante > 0 && (
         <span style={{ ...TAB, fontSize: "clamp(8px,2.2vw,10px)", color: C.text3 }}>ante {ante}</span>
       )}
+
+      {seat.isButton && (
+        <div
+          aria-label="bouton du donneur"
+          style={{
+            position: "absolute",
+            top: "50%",
+            transform: "translateY(-50%)",
+            ...dealerSide,
+            width: "clamp(22px,5.4vw,28px)",
+            height: "clamp(22px,5.4vw,28px)",
+            borderRadius: "50%",
+            background: "#F4F1E8",
+            color: "#0E1117",
+            fontWeight: 900,
+            fontSize: "clamp(11px,3vw,14px)",
+            display: "grid",
+            placeItems: "center",
+            boxShadow: "0 3px 8px rgba(0,0,0,0.55)",
+            border: "1px solid rgba(0,0,0,0.25)",
+            zIndex: 7,
+          }}
+        >
+          D
+        </div>
+      )}
     </div>
   );
 }
@@ -261,7 +292,6 @@ export default function PokerTableView({
   heroSeat?: number;
 }) {
   const board = state.board.map(parseCard);
-  const buttonSeat = state.seats.find((s) => s.isButton);
   const climax = state.kind === "award";
   const n = state.seats.length;
   // Screen coords for a seat: pinned-to-hero layout if heroSeat is set, else
@@ -325,15 +355,6 @@ export default function PokerTableView({
         {state.seats.map((s) => (
           <SeatPod key={s.seat} seat={s} xy={xyOf(s)} ante={state.ante} reveal={revealAll} />
         ))}
-
-        {/* dealer button */}
-        {buttonSeat && (
-          <Positioned xy={xyOf(buttonSeat)} factor={0.2} z={5}>
-            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#F4F1E8", color: "#0E1117", fontWeight: 900, fontSize: 14, display: "grid", placeItems: "center", boxShadow: "0 3px 8px rgba(0,0,0,0.55)" }}>
-              D
-            </div>
-          </Positioned>
-        )}
 
         {/* bet chips on the bet line (never on the cards) */}
         {state.seats

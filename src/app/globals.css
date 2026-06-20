@@ -157,6 +157,16 @@ body {
 
 ::selection { background: rgba(45, 212, 167, 0.28); color: #fff; }
 
+/* Action buttons (/play): clear hover/active feedback, touch-friendly. */
+.play-action-btn {
+  transition: filter 0.12s ease, transform 0.06s ease, box-shadow 0.12s ease;
+  min-height: 44px;
+}
+.play-action-btn:hover { filter: brightness(1.08); }
+.play-action-btn:active { transform: translateY(1px); }
+.play-action-btn:focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; }
+.play-action-btn:disabled { opacity: 0.4; cursor: not-allowed; filter: none; transform: none; }
+
 .arena-range { accent-color: var(--color-teal); }
 .arena-range::-webkit-slider-thumb {
   -webkit-appearance: none;

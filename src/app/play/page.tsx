@@ -259,15 +259,22 @@ export default function PlayPage() {
     const raw = state.currentBet + Math.round(frac * (pot + legal.toCall));
     return Math.max(legal.minTo, Math.min(legal.maxTo, raw));
   };
-  const PRESETS = legal
-    ? [
-        { label: "⅓", value: presetTo(1 / 3) },
-        { label: "⅔", value: presetTo(2 / 3) },
-        { label: "POT", value: presetTo(1) },
-        { label: "2× POT", value: presetTo(2) },
-        { label: "AI", value: legal.maxTo },
-      ]
-    : [];
+  const aggressive = !!legal && (legal.canBet || legal.canRaise);
+  const customAmount = legal ? Math.min(Math.max(amount, legal.minTo), legal.maxTo) : amount;
+  // One-click raise sizes: pot-fraction (applied AFTER calling), each clamped to a
+  // LEGAL "to". Drop any that collapse to all-in or duplicate another (so we never
+  // show an illegal or redundant amount); All-in is always offered last.
+  const RAISE_PRESETS: { label: string; value: number }[] = [];
+  if (legal && aggressive) {
+    const seen = new Set<number>();
+    for (const [label, frac] of [["⅓", 1 / 3], ["⅔", 2 / 3], ["POT", 1], ["2× POT", 2]] as [string, number][]) {
+      const v = presetTo(frac);
+      if (v >= legal.maxTo || seen.has(v)) continue;
+      seen.add(v);
+      RAISE_PRESETS.push({ label, value: v });
+    }
+    RAISE_PRESETS.push({ label: "All-in", value: legal.maxTo });
+  }
 
   return (
     <main style={{ minHeight: "100dvh", background: C.appBg, color: C.text }}>
@@ -318,63 +325,46 @@ export default function PlayPage() {
                 </button>
               </div>
             ) : legal ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {/* Primary one-click actions */}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
-                  {legal.canFold && <button style={btn("#E2533B", "#fff")} onClick={() => void onAct({ type: "fold" })}>Fold</button>}
+                  {legal.canFold && <button className="play-action-btn" style={btn("#E2533B", "#fff")} onClick={() => void onAct({ type: "fold" })}>Fold</button>}
                   {legal.canCheck ? (
-                    <button style={btn("#21B07A")} onClick={() => void onAct({ type: "check" })}>Check</button>
+                    <button className="play-action-btn" style={btn("#21B07A")} onClick={() => void onAct({ type: "check" })}>Check</button>
                   ) : (
-                    legal.canCall && <button style={btn("#21B07A")} onClick={() => void onAct({ type: "call" })}>{`Call ${legal.callAmount}`}</button>
-                  )}
-                  {(legal.canBet || legal.canRaise) && (
-                    <button style={btn("#E0913B")} onClick={() => void onAct({ type: legal.aggressiveType, to: amount })}>
-                      {legal.aggressiveType === "bet" ? `Bet → ${amount}` : `Raise → ${amount}`}
-                    </button>
+                    legal.canCall && <button className="play-action-btn" style={btn("#21B07A")} onClick={() => void onAct({ type: "call" })}>{`Call ${legal.callAmount}`}</button>
                   )}
                 </div>
-                {(legal.canBet || legal.canRaise) && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {/* Quick-size presets — pot-fraction (after calling), clamped to min-raise & stack. */}
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {PRESETS.map((p) => {
-                        // Grey a preset that collapses onto a neighbour it can't beat
-                        // (e.g. its size is below the legal min-raise → no distinct spot).
-                        const redundant = p.label !== "AI" && p.value <= legal.minTo && legal.minTo < legal.maxTo && presetTo(1 / 3) >= p.value && p.value !== presetTo(1 / 3);
-                        const active = amount === p.value;
-                        const accent = C.action.bet;
-                        return (
-                          <button
-                            key={p.label}
-                            disabled={redundant}
-                            onClick={() => setAmount(p.value)}
-                            style={{
-                              flex: 1,
-                              appearance: "none",
-                              border: `1px solid ${active ? accent : C.border}`,
-                              borderRadius: 10,
-                              background: active ? "rgba(224,145,59,0.16)" : "transparent",
-                              color: redundant ? C.text3 : active ? accent : C.text,
-                              fontSize: 13,
-                              fontWeight: 600,
-                              minHeight: 44,
-                              padding: "8px 4px",
-                              cursor: redundant ? "not-allowed" : "pointer",
-                              opacity: redundant ? 0.4 : 1,
-                              fontVariantNumeric: "tabular-nums",
-                            }}
-                          >
-                            <div>{p.label}</div>
-                            <div style={{ fontSize: 11, fontWeight: 500, color: redundant ? C.text3 : C.text2 }}>{p.value}</div>
-                          </button>
-                        );
-                      })}
+
+                {aggressive && (
+                  <>
+                    {/* One-click bet sizes — a single tap fires the raise at this legal amount */}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {RAISE_PRESETS.map((p) => (
+                        <button
+                          key={p.label}
+                          className="play-action-btn"
+                          onClick={() => void onAct({ type: legal.aggressiveType, to: p.value })}
+                          style={{ ...btn(C.action.bet), flex: "1 1 0", minWidth: 88, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "0 10px" }}
+                        >
+                          <span>{p.label}</span>
+                          <span style={{ fontVariantNumeric: "tabular-nums", opacity: 0.82, fontWeight: 700 }}>{p.value}</span>
+                        </button>
+                      ))}
                     </div>
-                    {/* Custom amount — slider + live value. */}
+
+                    {/* Custom amount — slider with its own confirm button */}
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <input className="arena-range" type="range" min={legal.minTo} max={legal.maxTo} step={1} value={Math.min(Math.max(amount, legal.minTo), legal.maxTo)} onChange={(e) => setAmount(Number(e.target.value))} style={{ flex: 1 }} />
-                      <span style={{ width: 56, textAlign: "right", fontVariantNumeric: "tabular-nums", color: C.text }}>{amount}</span>
+                      <input className="arena-range" type="range" min={legal.minTo} max={legal.maxTo} step={1} value={customAmount} onChange={(e) => setAmount(Number(e.target.value))} style={{ flex: 1 }} />
+                      <button
+                        className="play-action-btn"
+                        onClick={() => void onAct({ type: legal.aggressiveType, to: customAmount })}
+                        style={{ ...btn("transparent", C.text), border: `1px solid ${C.action.bet}`, minWidth: 124 }}
+                      >
+                        {legal.aggressiveType === "bet" ? `Bet → ${customAmount}` : `Raise → ${customAmount}`}
+                      </button>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
             ) : (
